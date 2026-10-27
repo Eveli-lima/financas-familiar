@@ -38,13 +38,13 @@
 
     <div class="relative w-full max-w-md bg-slate-900/90 backdrop-blur-2xl border border-sky-400/20 rounded-3xl p-5 sm:p-7 shadow-2xl text-white my-auto">
       
-      <!-- Ícone e Cabeçalho -->
+      <!-- Ícone e Cabeçalho Neutro e Seguro -->
       <div class="text-center mb-5">
         <div class="w-14 h-14 mx-auto mb-2.5 rounded-2xl bg-gradient-to-tr from-sky-600 to-indigo-600 flex items-center justify-center text-2xl shadow-lg shadow-sky-500/30 border border-sky-300/30">
-          <span id="loginAvatarDisplay">👩‍💼</span>
+          <span id="loginAvatarDisplay">🏛️</span>
         </div>
         <h2 id="loginWelcomeGreeting" class="text-xl sm:text-2xl font-black text-white tracking-tight">Finanças da Família</h2>
-        <p class="text-xs text-sky-200/70 mt-0.5">Éveli & Vital • Nuvem PostgreSQL Supabase</p>
+        <p class="text-xs text-sky-200/70 mt-0.5">Gestão Financeira Inteligente & Segura</p>
       </div>
 
       <!-- 1. Botão de Login Rápido com o Google (OAuth) -->
@@ -70,7 +70,7 @@
         </div>
       </div>
 
-      <!-- 2. Abas de Modo (Entrar / Criar Conta / PIN Local) -->
+      <!-- 2. Abas de Modo (Entrar / Criar Conta / PIN de Emergência) -->
       <div id="loginModeTabs" class="flex p-1 bg-slate-950/70 border border-slate-800 rounded-2xl mb-4">
         <button
           type="button"
@@ -93,31 +93,40 @@
           id="authTabBtnPin"
           onclick="setAuthMode('pin')"
           class="flex-1 py-1.5 px-2 rounded-xl text-xs font-medium text-slate-400 hover:text-slate-200 transition cursor-pointer"
-          title="Acesso rápido usando senha/PIN familiar"
+          title="Acesso de contingência por senha/PIN mestre"
         >
-          PIN Local
+          PIN de Acesso
         </button>
       </div>
 
-      <!-- 3. Seleção de Integrante (Quem está entrando?) -->
-      <div class="mb-4">
-        <label class="block text-[11px] font-bold uppercase tracking-wider text-sky-300/80 mb-1.5 text-center">
-          Identificação do Integrante:
-        </label>
-        <div class="flex gap-2.5">
-          <button type="button" id="loginProfileBtnEveli" onclick="selectLoginProfile('Éveli')" class="flex-1 py-2 px-3 rounded-2xl font-bold text-xs bg-sky-600 text-white shadow-md shadow-sky-600/20 border-2 border-sky-400 flex items-center justify-center gap-2 transition cursor-pointer">
-            <span class="text-base">👩‍💼</span>
-            <span>Éveli</span>
-          </button>
-          <button type="button" id="loginProfileBtnVital" onclick="selectLoginProfile('Vital')" class="flex-1 py-2 px-3 rounded-2xl font-semibold text-xs bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border border-slate-700 flex items-center justify-center gap-2 transition cursor-pointer">
-            <span class="text-base">👨‍💼</span>
-            <span>Vital</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- 4. Formulário Principal -->
+      <!-- 3. Formulário Principal -->
       <form onsubmit="submitAppLogin(event)" class="space-y-3.5">
+        <!-- Campo de Nome (Exibido apenas na aba Criar Conta) -->
+        <div id="loginNameField" class="hidden">
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Seu Nome</label>
+          <input
+            type="text"
+            id="loginNameInput"
+            autocomplete="name"
+            placeholder="Como deseja ser chamado(a)?"
+            class="w-full bg-slate-950/70 border border-slate-700 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20 rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm text-white placeholder-slate-500 outline-none transition"
+          />
+        </div>
+
+        <!-- Campo de Código da Família (Exibido apenas na aba Criar Conta) -->
+        <div id="loginHouseholdField" class="hidden">
+          <div class="flex items-center justify-between mb-1">
+            <label class="text-xs font-semibold text-slate-300">Código da Família (Opcional)</label>
+            <span class="text-[10px] text-sky-400/80">Para compartilhar com cônjuge</span>
+          </div>
+          <input
+            type="text"
+            id="loginHouseholdInput"
+            placeholder="Ex: casal_eveli_vital (ou deixe vazio para criar uma nova família)"
+            class="w-full bg-slate-950/70 border border-slate-700 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20 rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm text-white placeholder-slate-500 outline-none transition"
+          />
+        </div>
+
         <!-- Campo de E-mail -->
         <div id="loginEmailField">
           <label class="block text-xs font-semibold text-slate-300 mb-1">E-mail</label>

@@ -182,13 +182,13 @@ function setAuthMode(mode) {
   authState.authMode = mode;
   if (typeof document === 'undefined') return;
 
+  const nameField = document.getElementById('loginNameField');
+  const householdField = document.getElementById('loginHouseholdField');
   const emailField = document.getElementById('loginEmailField');
   const passwordField = document.getElementById('loginPasswordField');
   const rememberField = document.getElementById('loginRememberField');
   const googleBtnBox = document.getElementById('loginGoogleBtnBox');
-  const submitBtn = document.getElementById('loginSubmitBtn');
   const submitBtnText = document.getElementById('loginSubmitBtnText');
-  const modeTabs = document.getElementById('loginModeTabs');
 
   const tabSignIn = document.getElementById('authTabBtnSignIn');
   const tabSignUp = document.getElementById('authTabBtnSignUp');
@@ -205,24 +205,29 @@ function setAuthMode(mode) {
   updateTabClass(tabSignUp, mode === 'signup');
   updateTabClass(tabPin, mode === 'pin');
 
+  // Reseta visibilidade dos campos
+  if (nameField) nameField.classList.add('hidden');
+  if (householdField) householdField.classList.add('hidden');
   if (emailField) emailField.classList.remove('hidden');
   if (passwordField) passwordField.classList.remove('hidden');
   if (rememberField) rememberField.classList.remove('hidden');
   if (googleBtnBox) googleBtnBox.classList.remove('hidden');
 
-  if (mode === 'recovery') {
+  if (mode === 'signup') {
+    if (nameField) nameField.classList.remove('hidden');
+    if (householdField) householdField.classList.remove('hidden');
+    if (submitBtnText) submitBtnText.textContent = 'Criar Minha Conta ✨';
+  } else if (mode === 'recovery') {
     if (passwordField) passwordField.classList.add('hidden');
     if (rememberField) rememberField.classList.add('hidden');
     if (googleBtnBox) googleBtnBox.classList.add('hidden');
     if (submitBtnText) submitBtnText.textContent = 'Enviar Link de Recuperação 📧';
-  } else if (mode === 'signup') {
-    if (submitBtnText) submitBtnText.textContent = 'Criar Minha Conta ✨';
   } else if (mode === 'pin') {
     if (emailField) emailField.classList.add('hidden');
     if (googleBtnBox) googleBtnBox.classList.add('hidden');
     if (submitBtnText) submitBtnText.textContent = 'Desbloquear com PIN 🔓';
   } else {
-    // signin
+    // signin padrão
     if (submitBtnText) submitBtnText.textContent = 'Entrar no Sistema 🚀';
   }
 
@@ -383,14 +388,14 @@ function setupSupabaseAuthListener() {
   client.auth.onAuthStateChange(async (event, session) => {
     if (event === 'SIGNED_IN' && session && session.user) {
       const email = session.user.email || '';
-      const metaPerson = session.user.user_metadata?.person;
-      let person = metaPerson || authState.selectedPerson;
-      if (!metaPerson && email.toLowerCase().includes('vital')) person = 'Vital';
-      if (!metaPerson && email.toLowerCase().includes('eveli')) person = 'Éveli';
+      const meta = session.user.user_metadata || {};
+      const person = meta.full_name || meta.name || meta.person || (email.toLowerCase().includes('vital') ? 'Vital' : (email.toLowerCase().includes('eveli') ? 'Éveli' : email.split('@')[0]));
+      const household = meta.household_code || (typeof cloudConfig !== 'undefined' ? cloudConfig.householdCode : 'casal_eveli_vital') || 'casal_eveli_vital';
 
       if (typeof cloudConfig !== 'undefined') {
         cloudConfig.loggedEmail = email;
         cloudConfig.loggedPerson = person;
+        cloudConfig.householdCode = household;
         if (typeof saveCloudConfig === 'function') saveCloudConfig();
       }
 
@@ -536,6 +541,16 @@ async function submitAppLogin(e) {
 
   // 2. MODO CADASTRO (SIGN UP)
   if (mode === 'signup') {
+    const nameInput = document.getElementById('loginNameInput');
+    const householdInput = document.getElementById('loginHouseholdInput');
+    const name = nameInput ? nameInput.value.trim() : '';
+    const customHousehold = householdInput ? householdInput.value.trim() : '';
+
+    if (!name) {
+      showLoginFeedback('Por favor, informe seu nome para o perfil.', 'warning');
+      if (nameInput) nameInput.focus();
+      return;
+    }
     if (!email || !email.includes('@')) {
       showLoginFeedback('Por favor, informe um e-mail válido.', 'warning');
       if (emailInput) emailInput.focus();
@@ -547,6 +562,8 @@ async function submitAppLogin(e) {
       return;
     }
 
+    const resolvedHousehold = customHousehold || (typeof cloudConfig !== 'undefined' ? cloudConfig.householdCode : 'casal_eveli_vital') || 'casal_eveli_vital';
+
     const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
     if (client) {
       showLoginFeedback('Criando sua conta na nuvem...', 'info');
@@ -556,7 +573,9 @@ async function submitAppLogin(e) {
           password,
           options: {
             data: {
-              person: authState.selectedPerson
+              full_name: name,
+              person: name,
+              household_code: resolvedHousehold
             }
           }
         });
@@ -564,11 +583,12 @@ async function submitAppLogin(e) {
 
         if (typeof cloudConfig !== 'undefined') {
           cloudConfig.loggedEmail = email;
-          cloudConfig.loggedPerson = authState.selectedPerson;
+          cloudConfig.loggedPerson = name;
+          cloudConfig.householdCode = resolvedHousehold;
           if (typeof saveCloudConfig === 'function') saveCloudConfig();
         }
 
-        showLoginFeedback(`Conta criada com sucesso para ${email}! Faça login para entrar.`, 'success');
+        showLoginFeedback(`Conta criada com sucesso para ${name}! Você já pode entrar.`, 'success');
         setTimeout(() => setAuthMode('signin'), 1500);
       } catch (err) {
         showLoginFeedback('Erro ao cadastrar: ' + (err.message || String(err)), 'danger');
@@ -598,12 +618,14 @@ async function submitAppLogin(e) {
 
       if (!error && data && data.user) {
         // SUCESSO VIA SUPABASE AUTH!
-        const metaPerson = data.user.user_metadata?.person;
-        const resolvedPerson = metaPerson || authState.selectedPerson;
+        const meta = data.user.user_metadata || {};
+        const resolvedPerson = meta.full_name || meta.name || meta.person || (email.toLowerCase().includes('vital') ? 'Vital' : (email.toLowerCase().includes('eveli') ? 'Éveli' : email.split('@')[0]));
+        const resolvedHousehold = meta.household_code || (typeof cloudConfig !== 'undefined' ? cloudConfig.householdCode : 'casal_eveli_vital') || 'casal_eveli_vital';
 
         if (typeof cloudConfig !== 'undefined') {
           cloudConfig.loggedEmail = email;
           cloudConfig.loggedPerson = resolvedPerson;
+          cloudConfig.householdCode = resolvedHousehold;
           if (typeof saveCloudConfig === 'function') saveCloudConfig();
         }
 
