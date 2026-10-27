@@ -1,0 +1,24 @@
+{
+  "name": "Finanças do Casal — Éveli & Marido",
+  "short_name": "Finanças Casal",
+  "description": "Sistema compartilhado de gestão financeira familiar: Conta Conjunta Itaú, 2 Cartões de Crédito, Parcelas e Metas.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f0f7ff",
+  "theme_color": "#0284c7",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='42' fill='%230284c7'/%3E%3Ctext x='96' y='132' font-family='Inter, sans-serif' font-size='108' font-weight='bold' fill='white' text-anchor='middle'%3E%E2%82%A3%3C/text%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='112' fill='%230284c7'/%3E%3Ctext x='256' y='352' font-family='Inter, sans-serif' font-size='288' font-weight='bold' fill='white' text-anchor='middle'%3E%E2%82%A3%3C/text%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

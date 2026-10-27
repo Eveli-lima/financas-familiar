@@ -1,0 +1,1317 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Finanças da Família — Éveli & Marido (Multi-Contas e Cartões PDF)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Biblioteca PDF.js para ler arquivos PDF de Extratos e Faturas direto no navegador -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    .itau-gradient {
+      background: linear-gradient(135deg, #ea580c 0%, #c2410c 50%, #1e3a8a 100%);
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    .filter-pill.active {
+      background-color: #ffffff;
+      color: #0f172a;
+      font-weight: 800;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+    }
+  </style>
+</head>
+<body class="pb-16">
+
+  <!-- CABEÇALHO SUPERIOR -->
+  <header class="itau-gradient text-white shadow-lg sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-11 h-11 rounded-2xl bg-white text-orange-600 flex items-center justify-center font-black text-xl shadow">
+          👨‍👩‍👧‍👦
+        </div>
+        <div>
+          <h1 class="font-extrabold text-lg sm:text-xl leading-tight">Central Financeira da Família</h1>
+          <p class="text-xs text-orange-100">Éveli & Marido • Contas Bancárias + Cartões de Crédito Detalhados</p>
+        </div>
+      </div>
+
+      <!-- Filtro por Pessoa (Visão Geral, Éveli, Marido) -->
+      <div class="flex items-center gap-1 bg-black/25 p-1 rounded-2xl border border-white/15">
+        <button onclick="setOwnerFilter('ALL')" id="btnOwner_ALL" class="filter-pill active text-xs px-3 py-1.5 rounded-xl transition">
+          👨‍👩‍👧‍👦 Família (Tudo)
+        </button>
+        <button onclick="setOwnerFilter('Éveli')" id="btnOwner_Éveli" class="filter-pill text-xs px-3 py-1.5 rounded-xl text-white/90 hover:bg-white/10 transition">
+          👩 Éveli
+        </button>
+        <button onclick="setOwnerFilter('Marido')" id="btnOwner_Marido" class="filter-pill text-xs px-3 py-1.5 rounded-xl text-white/90 hover:bg-white/10 transition">
+          👨 Marido
+        </button>
+      </div>
+
+      <!-- Filtro de Período -->
+      <div class="flex items-center gap-1 bg-black/25 p-1 rounded-2xl border border-white/15">
+        <button onclick="setPeriod('2026-10')" id="btnPeriod_2026-10" class="filter-pill active text-xs px-2.5 py-1.5 rounded-xl transition">
+          Out/26 (Atual)
+        </button>
+        <button onclick="setPeriod('2026-09')" id="btnPeriod_2026-09" class="filter-pill text-xs px-2.5 py-1.5 rounded-xl text-white/90 hover:bg-white/10 transition">
+          Set/26
+        </button>
+        <button onclick="setPeriod('2026-08')" id="btnPeriod_2026-08" class="filter-pill text-xs px-2.5 py-1.5 rounded-xl text-white/90 hover:bg-white/10 transition">
+          Ago/26
+        </button>
+        <button onclick="setPeriod('ALL')" id="btnPeriod_ALL" class="filter-pill text-xs px-2.5 py-1.5 rounded-xl text-white/90 hover:bg-white/10 transition">
+          Tudo
+        </button>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button onclick="openImportModal()" class="text-xs bg-white text-orange-700 hover:bg-orange-50 font-extrabold px-3.5 py-2 rounded-xl shadow transition flex items-center gap-1.5">
+          📂 + Adicionar Extratos / Faturas (PDF, OFX, TXT)
+        </button>
+        <button onclick="downloadHtmlFile()" class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-2 rounded-xl shadow transition">
+          💾 Baixar .HTML
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 mt-6 space-y-6">
+
+    <!-- BARRA DE DOCUMENTOS CARREGADOS (CONTAS E CARTÕES DA FAMÍLIA) -->
+    <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-xs font-extrabold uppercase text-slate-400 mr-1">Arquivos Integrados:</span>
+        <div id="importedSourcesBadges" class="flex flex-wrap gap-1.5"></div>
+      </div>
+      <div class="flex items-center gap-3">
+        <label class="inline-flex items-center gap-2 cursor-pointer select-none bg-orange-50 px-3 py-1.5 rounded-xl border border-orange-200 text-xs font-bold text-orange-950">
+          <input type="checkbox" id="includeCurrentCardBillToggle" checked onchange="toggleIncludeCardBill(this.checked)" class="rounded text-orange-600" />
+          <span>Incluir Fatura Detalhada MC Gold 21/10 (R$ 3.096,11) nas Saídas de Outubro</span>
+        </label>
+        <button onclick="resetRealData()" class="text-xs text-slate-400 hover:text-rose-600 font-semibold underline">
+          Restaurar Padrão
+        </button>
+      </div>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- 1. OS 4 CARTÕES PRINCIPAIS DO MÊS (ANTERIOR, ENTRADAS, SAÍDAS, TOTAL)-->
+    <!-- =================================================================== -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+
+      <!-- 1. Saldo do Mês Anterior -->
+      <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold uppercase text-slate-500">1. Saldo do Mês Anterior</span>
+          <button onclick="editPrevBalanceManual()" class="text-xs text-indigo-600 hover:underline font-bold">✏️ Ajustar</button>
+        </div>
+        <div class="my-2">
+          <div id="prevMonthBalanceDisplay" class="text-2xl font-black text-slate-800">R$ 48,17</div>
+          <p id="subPrevBalance" class="text-xs text-slate-400 mt-1">Saldo bancário que virou do mês passado</p>
+        </div>
+      </div>
+
+      <!-- 2. Entradas -->
+      <div class="bg-white rounded-2xl p-5 border-l-4 border-l-emerald-500 border border-slate-200 shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold uppercase text-emerald-700">2. Entradas (Receitas)</span>
+          <span class="text-lg">⬆️</span>
+        </div>
+        <div class="my-2">
+          <div id="incomeTotalDisplay" class="text-2xl font-black text-emerald-600">+ R$ 500,00</div>
+          <p id="incomeCountSub" class="text-xs text-slate-400 mt-1">Soma das contas selecionadas</p>
+        </div>
+      </div>
+
+      <!-- 3. Saídas -->
+      <div class="bg-white rounded-2xl p-5 border-l-4 border-l-rose-500 border border-slate-200 shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold uppercase text-rose-700">3. Saídas (Conta + Cartão)</span>
+          <span class="text-lg">⬇️</span>
+        </div>
+        <div class="my-2">
+          <div id="expenseTotalDisplay" class="text-2xl font-black text-rose-600">- R$ 3.648,77</div>
+          <p id="expenseBreakdownSub" class="text-xs text-slate-500 mt-1">Conta: R$ 552,66 | Cartão: R$ 3.096,11</p>
+        </div>
+      </div>
+
+      <!-- 4. Total Deste Mês -->
+      <div id="currentBalanceCard" class="bg-rose-600 text-white rounded-2xl p-5 shadow-lg flex flex-col justify-between transition">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-extrabold uppercase tracking-wider text-white/90">4. Total Deste Mês (Saldo)</span>
+          <span class="text-lg">💰</span>
+        </div>
+        <div class="my-2">
+          <div id="currentMonthTotalDisplay" class="text-2xl sm:text-3xl font-black">-R$ 3.100,60</div>
+          <p id="currentBalanceStatusText" class="text-xs text-white/90 font-medium mt-1">
+            Inclui a fatura de 21/10 (R$ 3.096,11)
+          </p>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- PAINEL DE PARCELAMENTOS DO CARTÃO (QUAIS TERMINAM AGORA!)           -->
+    <!-- =================================================================== -->
+    <section class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-5 shadow-md">
+      <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+        <div>
+          <span class="text-[11px] font-extrabold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2.5 py-0.5 rounded-full">
+            🎉 Radar de Alívio no Cartão Itaú MC Gold (Final 5544)
+          </span>
+          <h3 class="text-base sm:text-lg font-black mt-1">
+            4 Compras Parceladas Terminam Nesta Fatura (Liberando +R$ 411,88/mês em Novembro!)
+          </h3>
+        </div>
+        <div class="text-right bg-white/10 px-3.5 py-2 rounded-xl border border-white/10 text-xs">
+          <div>Limite Total: <strong>R$ 7.740,00</strong> | Disponível: <strong class="text-emerald-300">R$ 1.785,41</strong></div>
+          <div>Comprometido Próxima Fatura: <strong class="text-amber-300">R$ 655,33</strong> (Demais faturas: R$ 1.941,93)</div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+        <div class="bg-emerald-950/60 border border-emerald-500/40 rounded-xl p-3">
+          <span class="text-[10px] font-extrabold uppercase text-emerald-300">🎉 Última Parcela (10/10)</span>
+          <p class="font-bold text-sm mt-0.5">SuperBruno -C (Maricá)</p>
+          <p class="text-emerald-300 font-black mt-1">Libera R$ 309,70 / mês</p>
+        </div>
+        <div class="bg-emerald-950/60 border border-emerald-500/40 rounded-xl p-3">
+          <span class="text-[10px] font-extrabold uppercase text-emerald-300">🎉 Última Parcela (03/03)</span>
+          <p class="font-bold text-sm mt-0.5">BR de Maricá + Objetiva + Pernambucanas</p>
+          <p class="text-emerald-300 font-black mt-1">Libera R$ 102,18 / mês</p>
+        </div>
+        <div class="bg-amber-950/60 border border-amber-500/40 rounded-xl p-3">
+          <span class="text-[10px] font-extrabold uppercase text-amber-300">⏳ Acabam em Novembro (Última no próx. mês)</span>
+          <p class="font-bold text-sm mt-0.5">Alura (11/12) + Objetiva SG (02/03) + Casas Pedro (01/02) + Perth + WS</p>
+          <p class="text-amber-300 font-black mt-1">Liberam +R$ 282,90 em Dezembro</p>
+        </div>
+        <div class="bg-white/10 border border-white/15 rounded-xl p-3">
+          <span class="text-[10px] font-extrabold uppercase text-indigo-200">📌 Continuam após Dezembro</span>
+          <p class="font-bold text-sm mt-0.5">BellaCasa (03/12: R$ 180) • Silvana (01/03: R$ 63) • Bela Ferraz • Amigão • Canva</p>
+          <p class="text-indigo-200 font-black mt-1">Total restante: R$ 372,43 / mês</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- 2. PLANEJADOR DE DESPESAS FUTURAS (TRANSFERIR OU ADIAR +1 MÊS)      -->
+    <!-- =================================================================== -->
+    <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+      <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-5">
+        <div>
+          <span class="text-[11px] font-extrabold uppercase tracking-wider bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full">
+            Planejamento Familiar
+          </span>
+          <h2 class="text-lg sm:text-xl font-black text-slate-800 mt-1">
+            🎯 Despesas Futuras & Objetivos (Divisão Automática pelo Prazo)
+          </h2>
+          <p class="text-xs text-slate-500">
+            Clique em <strong>"✅ Transferir Mês"</strong> para separar o valor e descontar da receita deste mês, ou em <strong>"⏳ Adiar (+1 Mês)"</strong> para recalcular o prazo acrescentando mais 1 mês.
+          </p>
+        </div>
+      </div>
+
+      <!-- Criar Nova Meta -->
+      <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 mb-6">
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+          <div class="sm:col-span-5">
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Nome da Despesa Futura (Família)</label>
+            <input id="goalNameInput" type="text" placeholder="Ex: IPVA, Reserva Familiar, Manutenção..." class="w-full text-sm border border-slate-300 rounded-xl px-3 py-2 bg-white" />
+          </div>
+          <div class="sm:col-span-3">
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Valor Total (R$)</label>
+            <input id="goalTotalInput" type="number" step="10" min="1" placeholder="Ex: 1500" class="w-full text-sm border border-slate-300 rounded-xl px-3 py-2 bg-white" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Prazo (Meses)</label>
+            <input id="goalMonthsInput" type="number" min="1" max="120" value="4" class="w-full text-sm border border-slate-300 rounded-xl px-3 py-2 bg-white" />
+          </div>
+          <div class="sm:col-span-2 flex items-end">
+            <button onclick="addFutureGoal()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm py-2 px-4 rounded-xl transition shadow">
+              + Criar Meta
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div id="futureGoalsContainer" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- 3. ORÇAMENTO POR CATEGORIA + TODAS AS MOVIMENTAÇÕES DETALHADAS      -->
+    <!-- =================================================================== -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- Coluna Esquerda (5 cols): Orçamento por Categoria com Gastos Reais da Fatura -->
+      <div class="lg:col-span-5 bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+            <div>
+              <h3 class="font-black text-base sm:text-lg text-slate-800">🚦 Orçamento Familiar por Categoria</h3>
+              <p class="text-xs text-slate-500">Já somando os 63 itens detalhados da sua fatura PDF!</p>
+            </div>
+            <span class="text-[11px] text-slate-400 font-bold">Clique p/ editar meta</span>
+          </div>
+
+          <div id="budgetCategoriesList" class="space-y-3.5"></div>
+        </div>
+
+        <!-- Card Educativo sobre Cheirin Bão + Lanches + Uber -->
+        <div class="mt-6 bg-amber-50 border border-amber-200 rounded-2xl p-4">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs font-extrabold text-amber-950 uppercase">🐜 Termômetro Lanches + Uber</span>
+            <strong id="antExpensesBadge" class="text-sm font-black text-rose-700">R$ 0,00</strong>
+          </div>
+          <p class="text-xs text-amber-900 leading-relaxed">
+            Na fatura atual, foram <strong>20 gastos em Lanches/Restaurantes (R$ 775,31)</strong> — incluindo 8 visitas ao <em>Cheirin Bão</em> (R$ 281,35) — e <strong>27 corridas de Uber (R$ 297,33)</strong>. Juntos somam <strong>R$ 1.072,64</strong>!
+          </p>
+        </div>
+      </div>
+
+      <!-- Coluna Direita (7 cols): Lista Completa de Lançamentos (Com Filtro por Categoria e Membro) -->
+      <div class="lg:col-span-7 bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3 mb-4">
+          <div>
+            <h3 class="font-black text-base sm:text-lg text-slate-800">📄 Lançamentos Detalhados (Contas + Cartões)</h3>
+            <p class="text-xs text-slate-500">Filtre abaixo por categoria ou adicione novos gastos da família</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <select id="categoryFilterSelect" onchange="renderAll()" class="text-xs border border-slate-300 rounded-xl px-2.5 py-1.5 bg-slate-50 font-bold">
+              <option value="ALL">Todas as Categorias</option>
+              <option value="Lanches & Restaurantes">🍔 Lanches & Restaurantes</option>
+              <option value="Mercado & Hortifruti">🛒 Mercado & Hortifruti</option>
+              <option value="Uber & Transporte">🚕 Uber & Transporte</option>
+              <option value="Parcelamentos Cartão">📦 Parcelamentos Cartão</option>
+              <option value="Saúde, Farmácia & Academia">💊 Saúde, Farmácia & Academia</option>
+              <option value="Auto Escola & Detran">🚗 Auto Escola & Detran</option>
+              <option value="Casa, Serviços & Outros">🏠 Casa, Serviços & Outros</option>
+              <option value="Receita">💰 Entradas (Receitas)</option>
+            </select>
+            <span id="txCountBadge" class="text-xs font-bold bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full">0 itens</span>
+          </div>
+        </div>
+
+        <!-- Adicionar Lançamento Rápido (Escolhendo Éveli ou Marido) -->
+        <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200 mb-4 grid grid-cols-1 sm:grid-cols-12 gap-2">
+          <select id="txOwnerInput" class="sm:col-span-2 text-xs border border-slate-300 rounded-xl px-2 py-2 bg-white font-bold">
+            <option value="Éveli">👩 Éveli</option>
+            <option value="Marido">👨 Marido</option>
+          </select>
+
+          <select id="txTypeInput" onchange="toggleCategoryByType()" class="sm:col-span-2 text-xs border border-slate-300 rounded-xl px-2 py-2 bg-white font-bold">
+            <option value="card">💳 Cartão</option>
+            <option value="debit">🏦 Conta/Pix</option>
+            <option value="income">💰 Entrada (+)</option>
+          </select>
+
+          <select id="txCategoryInput" class="sm:col-span-3 text-xs border border-slate-300 rounded-xl px-2 py-2 bg-white">
+            <option value="Lanches & Restaurantes">🍔 Lanches & Restaurantes</option>
+            <option value="Mercado & Hortifruti">🛒 Mercado & Hortifruti</option>
+            <option value="Uber & Transporte">🚕 Uber & Transporte</option>
+            <option value="Saúde, Farmácia & Academia">💊 Saúde, Farmácia & Academia</option>
+            <option value="Parcelamentos Cartão">📦 Parcelamentos Cartão</option>
+            <option value="Auto Escola & Detran">🚗 Auto Escola & Detran</option>
+            <option value="Casa, Serviços & Outros">🏠 Casa, Serviços & Outros</option>
+          </select>
+
+          <input id="txDescInput" type="text" placeholder="Descrição..." class="sm:col-span-3 text-xs border border-slate-300 rounded-xl px-2.5 py-2 bg-white" />
+
+          <div class="sm:col-span-2 flex gap-1">
+            <input id="txAmountInput" type="number" step="0.01" min="0.01" placeholder="R$" class="w-full text-xs border border-slate-300 rounded-xl px-2 py-2 bg-white" />
+            <button onclick="addManualTransaction()" class="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-2.5 py-2 rounded-xl shrink-0">
+              +
+            </button>
+          </div>
+        </div>
+
+        <!-- Lista Rolável -->
+        <div id="transactionsList" class="space-y-2 max-h-[520px] overflow-y-auto custom-scroll pr-1"></div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- =================================================================== -->
+  <!-- MODAL MULTI-ARQUIVOS: LEITOR DE VÁRIOS PDFs, OFX, TXT E CSV          -->
+  <!-- =================================================================== -->
+  <div id="importModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
+      <div class="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <span class="text-[11px] font-extrabold uppercase tracking-wider bg-indigo-100 text-indigo-800 px-2.5 py-1 rounded-full">
+            Suporte Multi-Contas & Multi-Cartões (.PDF, .OFX, .TXT, .CSV)
+          </span>
+          <h3 class="text-xl font-black text-slate-900 mt-1">📂 Adicionar Extratos Bancários ou Faturas em PDF</h3>
+          <p class="text-xs text-slate-500 mt-0.5">
+            Junte os seus arquivos e os do seu marido! Você pode selecionar <strong>vários arquivos de uma só vez</strong>.
+          </p>
+        </div>
+        <button onclick="closeImportModal()" class="text-slate-400 hover:text-slate-700 font-bold text-lg">✕</button>
+      </div>
+
+      <!-- Passo 1: De quem é este documento e qual o tipo? -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200 mb-4">
+        <div>
+          <label class="block text-xs font-extrabold text-slate-700 mb-1">1. Titular da Conta/Cartão</label>
+          <select id="importOwnerSelect" class="w-full text-xs sm:text-sm border border-slate-300 rounded-xl px-3 py-2 bg-white font-bold">
+            <option value="Marido">👨 Marido</option>
+            <option value="Éveli">👩 Éveli</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-extrabold text-slate-700 mb-1">2. Tipo de Arquivo</label>
+          <select id="importDocTypeSelect" class="w-full text-xs sm:text-sm border border-slate-300 rounded-xl px-3 py-2 bg-white font-bold">
+            <option value="auto">🤖 Detectar Automaticamente</option>
+            <option value="card">💳 Fatura de Cartão de Crédito</option>
+            <option value="bank">🏦 Extrato de Conta Corrente</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-extrabold text-slate-700 mb-1">3. Nome do Banco/Cartão</label>
+          <input id="importAccountLabel" type="text" placeholder="Ex: Cartão Marido, Nubank..." class="w-full text-xs sm:text-sm border border-slate-300 rounded-xl px-3 py-2 bg-white" />
+        </div>
+      </div>
+
+      <!-- Passo 2: Selecionar 1 ou Vários Arquivos (.PDF, .OFX, .TXT, .CSV) -->
+      <div class="bg-orange-50/70 border-2 border-dashed border-orange-300 rounded-2xl p-5 mb-4 text-center">
+        <label class="block text-sm font-black text-slate-800 mb-1">
+          Selecione um ou mais arquivos (.PDF, .OFX, .TXT ou .CSV)
+        </label>
+        <p class="text-xs text-slate-500 mb-3">
+          Leitor de PDF integrado: lê faturas de cartão em PDF e extratos bancários sem precisar converter!
+        </p>
+        <input id="multiFileInput" type="file" multiple accept=".pdf,.ofx,.txt,.csv" onchange="handleMultiFileUpload(event)" class="mx-auto block w-full max-w-md text-xs text-slate-600 file:mr-3 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-extrabold file:bg-orange-600 file:text-white hover:file:bg-orange-700 cursor-pointer" />
+        <div id="pdfUploadStatus" class="hidden mt-3 text-xs font-bold text-indigo-700 animate-pulse">
+          ⏳ Lendo páginas do PDF e classificando compras...
+        </div>
+      </div>
+
+      <!-- Passo 3: Ou colar texto manualmente -->
+      <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4">
+        <label class="block text-xs font-extrabold uppercase text-slate-700 mb-1">
+          Ou cole aqui os lançamentos copiados de qualquer banco/cartão:
+        </label>
+        <textarea id="pasteRawTextarea" rows="4" placeholder="Ex:&#10;05/10 SALARIO MARIDO 4500,00&#10;10/10 MERCADO ASSAI -520,00&#10;12/10 POSTO IPIRANGA -180,00" class="w-full text-xs font-mono border border-slate-300 rounded-xl p-3 bg-white focus:outline-none focus:border-orange-500"></textarea>
+      </div>
+
+      <div class="flex justify-end gap-2">
+        <button onclick="closeImportModal()" class="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100">
+          Fechar
+        </button>
+        <button onclick="processPastedTextManual()" class="px-5 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold bg-orange-600 hover:bg-orange-700 text-white shadow">
+          ⚡ Importar Texto Colado
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Configura worker do PDF.js
+    if (window.pdfjsLib) {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+
+    const STORAGE_KEY = 'financas_familia_completa_v4';
+
+    function formatBRL(val) {
+      return Number(val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function downloadHtmlFile() {
+      const htmlContent = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+      const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'financas_familia_completo.html';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    // =========================================================================
+    // TODOS OS DADOS REAIS DA ÉVELI (CONTA + 63 ITENS DA FATURA PDF 21/10)
+    // =========================================================================
+    function getInitialFamilyData() {
+      return {
+        selectedPeriod: '2026-10',
+        selectedOwner: 'ALL',
+        includeCurrentCardBill: true,
+        importedSources: [
+          { id: 's1', owner: 'Éveli', name: 'Conta Itaú 16718-7 (Ago-Out/26)', type: 'bank' },
+          { id: 's2', owner: 'Éveli', name: 'Fatura PDF MC Gold 5544 (Venc 21/10: R$ 3.096,11)', type: 'card' }
+        ],
+        periodStartingBalances: {
+          '2026-08': { amount: 1063.17, label: 'Saldo em 15/08/2026 (Conta Itaú Éveli)' },
+          '2026-09': { amount: 786.79, label: 'Saldo Anterior em 31/08/2026' },
+          '2026-10': { amount: 48.17, label: 'Saldo Anterior em 30/09/2026' },
+          'ALL':     { amount: 1063.17, label: 'Saldo Inicial em 15/08/2026' }
+        },
+        budgets: {
+          'Lanches & Restaurantes': 500,
+          'Mercado & Hortifruti': 750,
+          'Uber & Transporte': 220,
+          'Parcelamentos Cartão': 850,
+          'Saúde, Farmácia & Academia': 300,
+          'Auto Escola & Detran': 450,
+          'Casa, Serviços & Outros': 400,
+          'Faturas Antigas Pagas': 3400
+        },
+        futureGoals: [
+          {
+            id: 'g1',
+            name: 'Guardar Alívio das 4 Parcelas que Acabam em Outubro (SuperBruno + 3 lojas)',
+            totalAmount: 1647.52,
+            savedAmount: 0,
+            remainingMonths: 4,
+            postponedCount: 0,
+            lastActionNote: 'R$ 411,88/mês ficam livres na fatura a partir de Novembro!'
+          },
+          {
+            id: 'g2',
+            name: 'Recompor Reserva de Giro da Conta Corrente',
+            totalAmount: 1000.00,
+            savedAmount: 0,
+            remainingMonths: 4,
+            postponedCount: 0,
+            lastActionNote: 'Para nunca precisar usar o Limite da Conta (LIS)'
+          },
+          {
+            id: 'g3',
+            name: 'Próximas Despesas CNH / Detran / Documentos',
+            totalAmount: 600.00,
+            savedAmount: 0,
+            remainingMonths: 3,
+            postponedCount: 0,
+            lastActionNote: 'Planejado em 3x sem apertar o mês'
+          }
+        ],
+        transactions: [
+          // =====================================================================
+          // 1. CONTA CORRENTE ITAÚ ÉVELI — OUTUBRO 2026 (R$ 500 Entrada / R$ 552,66 Saída)
+          // =====================================================================
+          { id: 'cc_1', owner: 'Éveli', source: 'Conta Itaú', period: '2026-10', date: '01/10/2026', type: 'income', category: 'Receita', desc: 'PIX TRANSF VITAL M01/10', amount: 500.00 },
+          { id: 'cc_2', owner: 'Éveli', source: 'Conta Itaú', period: '2026-10', date: '01/10/2026', type: 'debit', category: 'Casa, Serviços & Outros', desc: 'PIX TRANSF Tania C01/10', amount: 14.00 },
+          { id: 'cc_3', owner: 'Éveli', source: 'Conta Itaú', period: '2026-10', date: '05/10/2026', type: 'debit', category: 'Auto Escola & Detran', desc: 'PAG BOLETO DETRAN - ESTADO DO RIO DE JA', amount: 419.55 },
+          { id: 'cc_4', owner: 'Éveli', source: 'Conta Itaú', period: '2026-10', date: '07/10/2026', type: 'debit', category: 'Casa, Serviços & Outros', desc: 'PIX TRANSF Amanda 07/10', amount: 110.00 },
+          { id: 'cc_5', owner: 'Éveli', source: 'Conta Itaú', period: '2026-10', date: '13/10/2026', type: 'debit', category: 'Casa, Serviços & Outros', desc: 'SEGURO CARTAO 0000', amount: 9.11 },
+
+          // =====================================================================
+          // 2. FATURA DETALHADA CARTÃO ITAÚ MC GOLD (VENCIMENTO 21/10/2026 = R$ 3.096,11)
+          // =====================================================================
+          // 2A. PARCELAMENTOS DE MESES ANTERIORES (R$ 845,84)
+          { id: 'fc_p1', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '27/11 (Parc)', type: 'card', category: 'Parcelamentos Cartão', desc: 'ALURA 11/12 (Educação - Acaba em Nov)', amount: 104.30 },
+          { id: 'fc_p2', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '02/01 (Parc)', type: 'card', category: 'Parcelamentos Cartão', desc: 'SuperBruno -C 10/10 (🎉 Última Parcela!)', amount: 309.70 },
+          { id: 'fc_p3', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '29/06 (Parc)', type: 'card', category: 'Parcelamentos Cartão', desc: 'EBN *Canva0 04/12', amount: 24.24 },
+          { id: 'fc_p4', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '07/07 (Parc)', type: 'card', category: 'Parcelamentos Cartão', desc: 'WS COSMETICO-C 04/05 (Acaba em Nov)', amount: 24.02 },
+          { id: 'fc_p5', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '14/07 (Parc)', type: 'card', category: 'Parcelamentos Cartão', desc: 'OBJETIVAMARICA 03/03 (🎉 Última Parcela!)', amount: 33.33 },
+          { id: 'fc_p6', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '31/07 (Parc)', type: 'card', category: 'Parcelamentos Cartão', desc: 'PERTHMARICABRA 03/04 (Acaba em Nov)', amount: 29.75 },
+          { id: 'fc_p7', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '31/07 (Parc)', type: 'card', category: 'Parcelamentos Cartão', desc: 'BR DE MARICAMA 03/03 (🎉 Última Parcela!)', amount: 35.52 },
+          { id: 'fc_p8', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '05/08 (Parc)', type: 'card', category: 'Parcelamentos Cartão', desc: 'CASAS PERNAMBU 03/03 (🎉 Última Parcela!)', amount: 33.33 },
+          { id: 'fc_p9', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '08/08 (Parc)', type: 'card', category: 'Parcelamentos Cartão', desc: 'BellaCasaGUATA 03/12', amount: 180.00 },
+          { id: 'fc_p10', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '21/08 (Parc)', type: 'card', category: 'Parcelamentos Cartão', desc: 'OBJETIVASAO GO 02/03 (Acaba em Nov)', amount: 71.65 },
+
+          // 2B. LANCHES, CAFÉS E RESTAURANTES NA FATURA (20 compras = R$ 775,31)
+          { id: 'fc_l1', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '13/09/2026', type: 'card', category: 'Lanches & Restaurantes', desc: 'JOAO E JOAO BRASILEIRO MARICA', amount: 141.90 },
+          { id: 'fc_l2', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '15/09/2026', type: 'card', category: 'Lanches & Restaurantes', desc: 'NORD PIZZABURGER MARICA', amount: 56.76 },
+          { id: 'fc_l3', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '16/09/2026', type: 'card', category: 'Lanches & Restaurantes', desc: 'CONVEM MARICA RESTAURANTE', amount: 22.90 },
+          { id: 'fc_l4', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '17/09/2026', type: 'card', category: 'Lanches & Restaurantes', desc: 'SIOLI RESTAURANTE MARICA', amount: 44.72 },
+          { id: 'fc_l5', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '19/09/2026', type: 'card', category: 'Lanches & Restaurantes', desc: 'CONVEM MARICA RESTAURANTE', amount: 21.90 },
+          { id: 'fc_l6', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '21/09/2026', type: 'card', category: 'Lanches & Restaurantes', desc: 'CHEIRIN BAO - MARICA', amount: 26.18 },
+          { id: 'fc_l7', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '21/09/2026', type: 'card', category: 'Lanches & Restaurantes', desc: 'CHEIRIN BAO - MARICA', amount: 25.80 },
+          { id: 'fc_l8', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '23/09/2026', type: 'card', category: 'Lanches & Restaurantes', desc: 'GBC COFFEE MARICA', amount: 21.00 },
+          { id: 'fc_l9', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '24/09/2026', type: 'card', category: 'Lanches & Restaurantes', desc: 'CONVEM MARICA RESTAURANTE', amount: 20.90 },
+          { id: 'fc_l10', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '24/09/2026', type: 'card', category: 'Lanches & Restaurantes', desc: 'CHEIRIN BAO - MARICA', amount: 52.60 },
+          { id: 'fc_l11', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '24/09/2026', type: 'card', category: 'Lanches & Restaurantes', desc: 'CHOPIN LANCHES RIO DE JANEIRO', amount: 28.07 },
+          { id: 'fc_l12', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '25/09/2026', type: 'card', category: 'Lanches & Restaurantes', desc: 'CHEIRIN BAO - MARICA', amount: 40.37 },
+          { id: 'fc_l13', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '25/09/2026', type: 'card', category: 'Lanches & Restaurantes', desc: 'BRODAO MARICA', amount: 23.00 },
+          { id: 'fc_l14', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '30/09/2026', type: 'card', category: 'Lanches & Restaurantes', desc: 'SIOLI MARICA', amount: 44.54 },
+          { id: 'fc_l15', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '03/10/2026', type: 'card', category: 'Lanches & Restaurantes', desc: 'NORD PIZZABURGER MARICA', amount: 34.94 },
+          { id: 'fc_l16', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '05/10/2026', type: 'card', category: 'Lanches & Restaurantes', desc: 'CHEIRIN BAO - MARICA', amount: 37.07 },
+          { id: 'fc_l17', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '06/10/2026', type: 'card', category: 'Lanches & Restaurantes', desc: 'NORD PIZZABURGER MARICA', amount: 33.33 },
+          { id: 'fc_l18', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '06/10/2026', type: 'card', category: 'Lanches & Restaurantes', desc: 'CHEIRIN BAO - MARICA', amount: 36.08 },
+          { id: 'fc_l19', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '07/10/2026', type: 'card', category: 'Lanches & Restaurantes', desc: 'CHEIRIN BAO - MARICA', amount: 26.18 },
+          { id: 'fc_l20', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '08/10/2026', type: 'card', category: 'Lanches & Restaurantes', desc: 'CHEIRIN BAO - MARICA', amount: 37.07 },
+
+          // 2C. SUPERMERCADO E HORTIFRUTI NA FATURA (12 compras = R$ 619,35)
+          { id: 'fc_m1', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '15/09/2026', type: 'card', category: 'Mercado & Hortifruti', desc: 'SPREZUNIC 745 RIO DE JANEIRO', amount: 126.03 },
+          { id: 'fc_m2', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '17/09/2026', type: 'card', category: 'Mercado & Hortifruti', desc: 'SPREZUNIC 745 RIO DE JANEIRO', amount: 16.55 },
+          { id: 'fc_m3', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '20/09/2026', type: 'card', category: 'Mercado & Hortifruti', desc: 'SPREZUNIC 745 RIO DE JANEIRO', amount: 94.67 },
+          { id: 'fc_m4', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '21/09/2026', type: 'card', category: 'Mercado & Hortifruti', desc: 'SPREZUNIC 745 RIO DE JANEIRO', amount: 24.46 },
+          { id: 'fc_m5', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '23/09/2026', type: 'card', category: 'Mercado & Hortifruti', desc: 'SPREZUNIC 745 RIO DE JANEIRO', amount: 90.09 },
+          { id: 'fc_m6', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '25/09/2026', type: 'card', category: 'Mercado & Hortifruti', desc: 'SUP PRINCESA MARICA 2', amount: 13.90 },
+          { id: 'fc_m7', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '25/09/2026', type: 'card', category: 'Mercado & Hortifruti', desc: 'SPREZUNIC 745 RIO DE JANEIRO', amount: 49.65 },
+          { id: 'fc_m8', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '28/09/2026', type: 'card', category: 'Mercado & Hortifruti', desc: 'CASAS PEDRO MARICA 01/02', amount: 53.18 },
+          { id: 'fc_m9', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '05/10/2026', type: 'card', category: 'Mercado & Hortifruti', desc: 'SPREZUNIC 745 RIO DE JANEIRO', amount: 64.45 },
+          { id: 'fc_m10', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '06/10/2026', type: 'card', category: 'Mercado & Hortifruti', desc: 'SPREZUNIC 745 RIO DE JANEIRO', amount: 24.02 },
+          { id: 'fc_m11', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '08/10/2026', type: 'card', category: 'Mercado & Hortifruti', desc: 'HORTIFRUT JVTA DE MARICA', amount: 31.33 },
+          { id: 'fc_m12', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '08/10/2026', type: 'card', category: 'Mercado & Hortifruti', desc: 'SPREZUNIC 745 RIO DE JANEIRO', amount: 31.02 },
+
+          // 2D. UBER E TRANSPORTE NA FATURA (27 viagens = R$ 297,33)
+          { id: 'fc_u1', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '13/09/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 9.95 },
+          { id: 'fc_u2', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '14/09/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 11.95 },
+          { id: 'fc_u3', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '14/09/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 8.94 },
+          { id: 'fc_u4', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '15/09/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 9.93 },
+          { id: 'fc_u5', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '16/09/2026', type: 'card', category: 'Uber & Transporte', desc: 'Uber UBER *TRIP HELP.UBER', amount: 8.95 },
+          { id: 'fc_u6', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '17/09/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 9.95 },
+          { id: 'fc_u7', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '21/09/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 8.94 },
+          { id: 'fc_u8', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '21/09/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 9.94 },
+          { id: 'fc_u9', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '22/09/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 8.96 },
+          { id: 'fc_u10', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '24/09/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 8.94 },
+          { id: 'fc_u11', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '24/09/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 15.93 },
+          { id: 'fc_u12', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '24/09/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 8.93 },
+          { id: 'fc_u13', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '25/09/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 7.96 },
+          { id: 'fc_u14', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '25/09/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 10.94 },
+          { id: 'fc_u15', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '27/09/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 9.95 },
+          { id: 'fc_u16', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '28/09/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 8.95 },
+          { id: 'fc_u17', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '30/09/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 8.96 },
+          { id: 'fc_u18', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '01/10/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 8.96 },
+          { id: 'fc_u19', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '04/10/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 14.96 },
+          { id: 'fc_u20', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '05/10/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 10.94 },
+          { id: 'fc_u21', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '05/10/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 9.94 },
+          { id: 'fc_u22', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '05/10/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 11.93 },
+          { id: 'fc_u23', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '07/10/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 12.94 },
+          { id: 'fc_u24', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '07/10/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 9.95 },
+          { id: 'fc_u25', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '07/10/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 13.94 },
+          { id: 'fc_u26', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '07/10/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR', amount: 15.94 },
+          { id: 'fc_u27', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '08/10/2026', type: 'card', category: 'Uber & Transporte', desc: 'DL *UberRides Sao Paulo BR (+ Ajuste Fechamento)', amount: 19.86 },
+
+          // 2E. ACADEMIA, SAÚDE E FARMÁCIA NA FATURA (R$ 273,59)
+          { id: 'fc_s1', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '21/09/2026', type: 'card', category: 'Saúde, Farmácia & Academia', desc: 'DROGARIA FARMAIS MARICA', amount: 19.20 },
+          { id: 'fc_s2', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '25/09/2026', type: 'card', category: 'Saúde, Farmácia & Academia', desc: 'Ana Paula Campos HEALTH MARICA', amount: 30.00 },
+          { id: 'fc_s3', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '30/09/2026', type: 'card', category: 'Saúde, Farmácia & Academia', desc: 'GIGIO FITNESS PAC GIGIO MARICA', amount: 169.00 },
+          { id: 'fc_s4', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '30/09/2026', type: 'card', category: 'Saúde, Farmácia & Academia', desc: 'DROGARIA MDA LTDA MARICA', amount: 21.99 },
+          { id: 'fc_s5', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '05/10/2026', type: 'card', category: 'Saúde, Farmácia & Academia', desc: 'Cartao de TODOS IPATINGA', amount: 33.40 },
+
+          // 2F. CASA, SERVIÇOS, ASSINATURAS E NOVAS PARCELAS NA FATURA (R$ 284,69)
+          { id: 'fc_o1', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '14/09/2026', type: 'card', category: 'Casa, Serviços & Outros', desc: 'CP AMIGAO 38 01/06 (Casa Maricá)', amount: 34.31 },
+          { id: 'fc_o2', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '14/09/2026', type: 'card', category: 'Casa, Serviços & Outros', desc: 'Mensalidade - Plano Anuidade Diferenciada Itaú', amount: 17.00 },
+          { id: 'fc_o3', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '20/09/2026', type: 'card', category: 'Casa, Serviços & Outros', desc: 'Google One SAO PAULO', amount: 35.99 },
+          { id: 'fc_o4', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '21/09/2026', type: 'card', category: 'Casa, Serviços & Outros', desc: 'BELA FERRAZ MA 01/05', amount: 30.58 },
+          { id: 'fc_o5', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '24/09/2026', type: 'card', category: 'Casa, Serviços & Outros', desc: 'TREMENDAO NITEROI', amount: 17.28 },
+          { id: 'fc_o6', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '01/10/2026', type: 'card', category: 'Casa, Serviços & Outros', desc: 'TIM 21983969941 RIO DE JANEIRO', amount: 55.99 },
+          { id: 'fc_o7', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '01/10/2026', type: 'card', category: 'Casa, Serviços & Outros', desc: 'SilvanaCarvalh 01/03 (Serviços São Gonçalo)', amount: 63.34 },
+          { id: 'fc_o8', owner: 'Éveli', source: 'Cartão MC Gold', period: '2026-10', date: '01/10/2026', type: 'card', category: 'Casa, Serviços & Outros', desc: 'BELA FERRAZ MA 01/03', amount: 40.00 },
+
+          // =====================================================================
+          // 3. SETEMBRO 2026 (CONTA CORRENTE ÉVELI)
+          // =====================================================================
+          { id: 'set_1', owner: 'Éveli', source: 'Conta Itaú', period: '2026-09', date: '24/09/2026', type: 'debit', category: 'Casa, Serviços & Outros', desc: 'RSCSS JOSELIA FERR2409', amount: 2.00 },
+          { id: 'set_2', owner: 'Éveli', source: 'Conta Itaú', period: '2026-09', date: '21/09/2026', type: 'income', category: 'Receita', desc: 'PIX TRANSF VITAL M21/09', amount: 400.00 },
+          { id: 'set_3', owner: 'Éveli', source: 'Conta Itaú', period: '2026-09', date: '21/09/2026', type: 'debit', category: 'Faturas Antigas Pagas', desc: 'FATURA ITAU MULT MC GOLD (Paga em 21/09)', amount: 3375.50 },
+          { id: 'set_4', owner: 'Éveli', source: 'Conta Itaú', period: '2026-09', date: '21/09/2026', type: 'income', category: 'Receita', desc: 'PIX TRANSF VITAL M21/09', amount: 3000.00 },
+          { id: 'set_5', owner: 'Éveli', source: 'Conta Itaú', period: '2026-09', date: '18/09/2026', type: 'debit', category: 'Mercado & Hortifruti', desc: 'RSCSS CP AMIGAO 31809', amount: 44.93 },
+          { id: 'set_6', owner: 'Éveli', source: 'Conta Itaú', period: '2026-09', date: '18/09/2026', type: 'debit', category: 'Mercado & Hortifruti', desc: 'RSCSS MUNDO DAS CA1809', amount: 8.00 },
+          { id: 'set_7', owner: 'Éveli', source: 'Conta Itaú', period: '2026-09', date: '18/09/2026', type: 'income', category: 'Receita', desc: 'PIX TRANSF DANIEL 18/09', amount: 8.00 },
+          { id: 'set_8', owner: 'Éveli', source: 'Conta Itaú', period: '2026-09', date: '18/09/2026', type: 'income', category: 'Receita', desc: 'PIX TRANSF LUCAS M18/09', amount: 8.00 },
+          { id: 'set_9', owner: 'Éveli', source: 'Conta Itaú', period: '2026-09', date: '18/09/2026', type: 'income', category: 'Receita', desc: 'PIX TRANSF 58.637.18/09', amount: 8.00 },
+          { id: 'set_10', owner: 'Éveli', source: 'Conta Itaú', period: '2026-09', date: '17/09/2026', type: 'income', category: 'Receita', desc: 'REND PAGO APLIC AUT MAIS', amount: 0.14 },
+          { id: 'set_11', owner: 'Éveli', source: 'Conta Itaú', period: '2026-09', date: '17/09/2026', type: 'debit', category: 'Auto Escola & Detran', desc: 'PIX QRS AUTO ESCOLA17/09', amount: 675.00 },
+          { id: 'set_12', owner: 'Éveli', source: 'Conta Itaú', period: '2026-09', date: '14/09/2026', type: 'debit', category: 'Casa, Serviços & Outros', desc: 'SEGURO CARTAO', amount: 9.11 },
+          { id: 'set_13', owner: 'Éveli', source: 'Conta Itaú', period: '2026-09', date: '11/09/2026', type: 'debit', category: 'Lanches & Restaurantes', desc: 'RSCSS CONVEM MARIC1109', amount: 20.90 },
+          { id: 'set_14', owner: 'Éveli', source: 'Conta Itaú', period: '2026-09', date: '08/09/2026', type: 'debit', category: 'Casa, Serviços & Outros', desc: 'PIX TRANSF Lorrane06/09', amount: 27.32 },
+
+          // =====================================================================
+          // 4. AGOSTO 2026 (CONTA CORRENTE ÉVELI)
+          // =====================================================================
+          { id: 'ago_1', owner: 'Éveli', source: 'Conta Itaú', period: '2026-08', date: '31/08/2026', type: 'income', category: 'Receita', desc: 'REND PAGO APLIC AUT MAIS', amount: 0.01 },
+          { id: 'ago_2', owner: 'Éveli', source: 'Conta Itaú', period: '2026-08', date: '31/08/2026', type: 'debit', category: 'Lanches & Restaurantes', desc: 'PIX QRS Ifood Pago 31/08', amount: 100.00 },
+          { id: 'ago_3', owner: 'Éveli', source: 'Conta Itaú', period: '2026-08', date: '28/08/2026', type: 'debit', category: 'Casa, Serviços & Outros', desc: 'PIX QRS ADMINISTRAD28/08', amount: 40.00 },
+          { id: 'ago_4', owner: 'Éveli', source: 'Conta Itaú', period: '2026-08', date: '24/08/2026', type: 'debit', category: 'Casa, Serviços & Outros', desc: 'PIX QRS Elidinea Az23/08', amount: 19.40 },
+          { id: 'ago_5', owner: 'Éveli', source: 'Conta Itaú', period: '2026-08', date: '21/08/2026', type: 'income', category: 'Receita', desc: 'PIX TRANSF VITAL M21/08', amount: 2871.00 },
+          { id: 'ago_6', owner: 'Éveli', source: 'Conta Itaú', period: '2026-08', date: '21/08/2026', type: 'debit', category: 'Faturas Antigas Pagas', desc: 'FATURA ITAU MULT MC GOLD (Paga em 21/08)', amount: 2870.19 },
+          { id: 'ago_7', owner: 'Éveli', source: 'Conta Itaú', period: '2026-08', date: '17/08/2026', type: 'debit', category: 'Casa, Serviços & Outros', desc: 'PIX QRS TUNA PAGAME16/08', amount: 117.80 }
+        ]
+      };
+    }
+
+    let state = loadState();
+
+    function loadState() {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try { return JSON.parse(saved); } catch (e) {}
+      }
+      return getInitialFamilyData();
+    }
+
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    function resetRealData() {
+      if (!confirm('Deseja restaurar os dados originais da sua conta e fatura do Itaú?')) return;
+      state = getInitialFamilyData();
+      saveState();
+      renderAll();
+    }
+
+    function setPeriod(p) {
+      state.selectedPeriod = p;
+      saveState();
+      renderAll();
+    }
+
+    function setOwnerFilter(owner) {
+      state.selectedOwner = owner;
+      saveState();
+      renderAll();
+    }
+
+    function toggleIncludeCardBill(checked) {
+      state.includeCurrentCardBill = checked;
+      saveState();
+      renderAll();
+    }
+
+    function editPrevBalanceManual() {
+      const p = state.selectedPeriod;
+      const cur = (state.periodStartingBalances[p] && state.periodStartingBalances[p].amount) || 0;
+      const val = prompt(`Informe o Saldo Bancário Anterior da Família para (${p}):`, cur);
+      if (val === null) return;
+      const num = parseFloat(String(val).replace(/\./g, '').replace(',', '.'));
+      if (!isNaN(num)) {
+        state.periodStartingBalances[p] = { amount: num, label: 'Ajustado manualmente' };
+        saveState();
+        renderAll();
+      }
+    }
+
+    // =========================================================================
+    // CLASSIFICADOR INTELIGENTE DE CATEGORIAS (PARA PDF, OFX, TXT E CSV)
+    // =========================================================================
+    function classifyItemCategory(desc, isIncome, isCard) {
+      if (isIncome) return 'Receita';
+      const d = desc.toUpperCase();
+      if (d.includes('UBER') || d.includes('99APP') || d.includes('99 POP') || d.includes('POSTO') || d.includes('SHELL') || d.includes('IPIRANGA')) {
+        return 'Uber & Transporte';
+      }
+      if (d.includes('CHEIRIN') || d.includes('PIZZA') || d.includes('BURGER') || d.includes('RESTAUR') || d.includes('SIOLI') || d.includes('IFOOD') || d.includes('LANCHE') || d.includes('COFFEE') || d.includes('JOAO E JOAO') || d.includes('BRODAO') || d.includes('CONVEM') || d.includes('PADARIA')) {
+        return 'Lanches & Restaurantes';
+      }
+      if (d.includes('PREZUNIC') || d.includes('MERCADO') || d.includes('ASSAI') || d.includes('ATACADAO') || d.includes('PRINCESA') || d.includes('HORTIFRUT') || d.includes('CASAS PEDRO') || d.includes('GUANABARA') || d.includes('CARREFOUR')) {
+        return 'Mercado & Hortifruti';
+      }
+      if (d.includes('DROGA') || d.includes('FARMA') || d.includes('RAIA') || d.includes('PACHECO') || d.includes('GIGIO') || d.includes('FITNES') || d.includes('HEALTH') || d.includes('CARTAO DE TODOS')) {
+        return 'Saúde, Farmácia & Academia';
+      }
+      if (d.includes('DETRAN') || d.includes('AUTO ESCOLA')) {
+        return 'Auto Escola & Detran';
+      }
+      if (isCard && /\d{2}\/\d{2}/.test(d)) {
+        return 'Parcelamentos Cartão';
+      }
+      return 'Casa, Serviços & Outros';
+    }
+
+    // =========================================================================
+    // LEITOR DE MÚLTIPLOS ARQUIVOS (.PDF, .OFX, .TXT, .CSV) PARA ÉVELI E MARIDO
+    // =========================================================================
+    async function extractTextFromPdfFile(file) {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let allLines = [];
+
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const textContent = await page.getTextContent();
+
+        // Agrupa palavras pela coordenada Y (mesma linha visual)
+        const rowsMap = {};
+        textContent.items.forEach(item => {
+          const yKey = Math.round(item.transform[5] / 4) * 4;
+          if (!rowsMap[yKey]) rowsMap[yKey] = [];
+          rowsMap[yKey].push({ x: item.transform[4], str: item.str });
+        });
+
+        const sortedYs = Object.keys(rowsMap).map(Number).sort((a, b) => b - a);
+        sortedYs.forEach(y => {
+          const rowStr = rowsMap[y]
+            .sort((a, b) => a.x - b.x)
+            .map(i => i.str.trim())
+            .filter(Boolean)
+            .join(' ');
+          if (rowStr) allLines.push(rowStr);
+        });
+      }
+      return allLines.join('\n');
+    }
+
+    function parseAnyFinancialText(rawText, owner, docTypeChoice, accountLabel) {
+      let addedCount = 0;
+      const isCardForce = docTypeChoice === 'card' || rawText.toUpperCase().includes('LANÇAMENTOS: COMPRAS E SAQUES') || rawText.toUpperCase().includes('RESUMO DA FATURA');
+
+      // 1. Caso seja arquivo .OFX
+      if (rawText.includes('<STMTTRN>') || rawText.includes('<OFX>')) {
+        const blocks = rawText.split('<STMTTRN>').slice(1);
+        blocks.forEach((block, idx) => {
+          const trnType = (block.match(/<TRNTYPE>([^\r\n<]+)/i) || [])[1]?.trim() || '';
+          const dtPosted = (block.match(/<DTPOSTED>(\d{8})/i) || [])[1]?.trim() || '';
+          const trnAmtRaw = (block.match(/<TRNAMT>([^\r\n<]+)/i) || [])[1]?.trim() || '0';
+          const memo = (block.match(/<MEMO>([^\r\n<]+)/i) || [])[1]?.trim() || 'Lançamento OFX';
+
+          const amountVal = parseFloat(trnAmtRaw.replace(',', '.'));
+          if (isNaN(amountVal) || amountVal === 0) return;
+
+          let dateFormatted = '15/10/2026';
+          let period = '2026-10';
+          if (dtPosted.length === 8) {
+            dateFormatted = `${dtPosted.slice(6, 8)}/${dtPosted.slice(4, 6)}/${dtPosted.slice(0, 4)}`;
+            period = `${dtPosted.slice(0, 4)}-${dtPosted.slice(4, 6)}`;
+          }
+
+          const isPositive = amountVal > 0 || trnType.toUpperCase() === 'CREDIT';
+          state.transactions.unshift({
+            id: 'imp_ofx_' + Date.now() + '_' + idx,
+            owner,
+            source: accountLabel || `Conta ${owner}`,
+            period,
+            date: dateFormatted,
+            type: isPositive ? 'income' : 'debit',
+            category: classifyItemCategory(memo, isPositive, false),
+            desc: memo,
+            amount: Math.abs(amountVal)
+          });
+          addedCount++;
+        });
+        return addedCount;
+      }
+
+      // 2. Caso seja texto de PDF (Fatura de Cartão ou Extrato Bancário) ou .TXT/.CSV
+      const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      const ignoreWords = [
+        'SALDO DO DIA', 'SALDO ANTERIOR', 'SALDO FINAL', 'TOTAL DOS LANÇAMENTOS',
+        'TOTAL DESTA FATURA', 'LANÇAMENTOS NO CARTÃO', 'PAGAMENTO MÍNIMO',
+        'VALOR TOTAL FINANCIADO', 'LIMITE TOTAL', 'LIMITE DISPONÍVEL',
+        'PRÓXIMA FATURA', 'DEMAIS FATURAS', 'TOTAL PARA PRÓXIMAS',
+        'PAGAMENTO EFETUADO', 'PAGAMENTO DEB AUTOMATIC', 'TOTAL DA FATURA ANTERIOR'
+      ];
+
+      lines.forEach((line, idx) => {
+        const up = line.toUpperCase();
+        if (ignoreWords.some(w => up.includes(w))) return;
+        if (up.includes('AGENDADO')) return; // Evita duplicar a fatura agendada
+
+        // Formato TXT ponto-e-vírgula (DD/MM/YYYY;DESC;VALOR)
+        if (line.includes(';')) {
+          const parts = line.split(';').map(s => s.trim());
+          if (parts.length >= 3) {
+            const dStr = parts[0];
+            const desc = parts[1];
+            const val = parseFloat(parts[2].replace(/\./g, '').replace(',', '.'));
+            if (!isNaN(val) && val !== 0 && /^\d{2}\/\d{2}/.test(dStr)) {
+              const mm = dStr.slice(3, 5);
+              const period = mm === '08' ? '2026-08' : (mm === '09' ? '2026-09' : '2026-10');
+              const isPos = val > 0 && !isCardForce;
+              state.transactions.unshift({
+                id: 'imp_sc_' + Date.now() + '_' + idx,
+                owner,
+                source: accountLabel || (isCardForce ? `Cartão ${owner}` : `Conta ${owner}`),
+                period,
+                date: dStr,
+                type: isPos ? 'income' : (isCardForce ? 'card' : 'debit'),
+                category: classifyItemCategory(desc, isPos, isCardForce),
+                desc,
+                amount: Math.abs(val)
+              });
+              addedCount++;
+            }
+          }
+          return;
+        }
+
+        // Formato Linha de PDF de Fatura ou Extrato (começa com DD/MM ou DD/MM/AAAA e termina com valor 00,00)
+        const matchPdfLine = line.match(/^(\d{2}\/\d{2}(?:\/\d{2,4})?)\s+(.+?)\s+(-?\d+(?:\.\d{3})*,\d{2}-?)$/);
+        if (matchPdfLine) {
+          const rawDate = matchPdfLine[1];
+          const desc = matchPdfLine[2].replace(/\|/g, ' ').trim();
+          let rawValStr = matchPdfLine[3];
+          const hasTrailingMinus = rawValStr.endsWith('-');
+          if (hasTrailingMinus) rawValStr = '-' + rawValStr.slice(0, -1);
+
+          const val = parseFloat(rawValStr.replace(/\./g, '').replace(',', '.'));
+          if (isNaN(val) || val === 0) return;
+
+          const isCard = isCardForce;
+          const period = isCard ? '2026-10' : (rawDate.slice(3, 5) === '08' ? '2026-08' : (rawDate.slice(3, 5) === '09' ? '2026-09' : '2026-10'));
+          const isIncome = !isCard && val > 0 && (desc.toUpperCase().includes('VITAL') || desc.toUpperCase().includes('PIX TRANSF') || desc.toUpperCase().includes('SALARIO') || desc.toUpperCase().includes('REND'));
+
+          state.transactions.unshift({
+            id: 'imp_pdf_' + Date.now() + '_' + idx,
+            owner,
+            source: accountLabel || (isCard ? `Cartão ${owner}` : `Conta ${owner}`),
+            period,
+            date: rawDate.length === 5 ? rawDate + '/2026' : rawDate,
+            type: isIncome ? 'income' : (isCard ? 'card' : 'debit'),
+            category: classifyItemCategory(desc, isIncome, isCard),
+            desc,
+            amount: Math.abs(val)
+          });
+          addedCount++;
+        }
+      });
+
+      return addedCount;
+    }
+
+    async function handleMultiFileUpload(event) {
+      const files = Array.from(event.target.files || []);
+      if (files.length === 0) return;
+
+      const owner = document.getElementById('importOwnerSelect').value;
+      const docType = document.getElementById('importDocTypeSelect').value;
+      const customLabel = document.getElementById('importAccountLabel').value.trim();
+      const statusEl = document.getElementById('pdfUploadStatus');
+      statusEl.classList.remove('hidden');
+
+      let totalImported = 0;
+
+      for (const file of files) {
+        const label = customLabel || `${file.name.slice(0, 22)} (${owner})`;
+        let rawText = '';
+
+        if (file.name.toLowerCase().endsWith('.pdf')) {
+          try {
+            rawText = await extractTextFromPdfFile(file);
+          } catch (err) {
+            alert(`Não foi possível ler o PDF "${file.name}".`);
+            continue;
+          }
+        } else {
+          rawText = await file.text();
+        }
+
+        const count = parseAnyFinancialText(rawText, owner, docType, label);
+        totalImported += count;
+
+        state.importedSources.push({
+          id: 'src_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+          owner,
+          name: `${label} (${count} itens)`,
+          type: docType === 'card' ? 'card' : 'bank'
+        });
+      }
+
+      statusEl.classList.add('hidden');
+      event.target.value = '';
+      closeImportModal();
+      saveState();
+      renderAll();
+      alert(`✅ ${files.length} arquivo(s) processado(s)! ${totalImported} movimentações adicionadas para ${owner}.`);
+    }
+
+    function processPastedTextManual() {
+      const text = document.getElementById('pasteRawTextarea').value.trim();
+      if (!text) {
+        alert('Cole os lançamentos na caixa de texto ou selecione os arquivos acima.');
+        return;
+      }
+      const owner = document.getElementById('importOwnerSelect').value;
+      const docType = document.getElementById('importDocTypeSelect').value;
+      const customLabel = document.getElementById('importAccountLabel').value.trim() || `Importado Manual (${owner})`;
+
+      const count = parseAnyFinancialText(text, owner, docType, customLabel);
+      state.importedSources.push({
+        id: 'src_' + Date.now(),
+        owner,
+        name: `${customLabel} (${count} itens)`,
+        type: docType
+      });
+
+      document.getElementById('pasteRawTextarea').value = '';
+      closeImportModal();
+      saveState();
+      renderAll();
+      alert(`✅ ${count} lançamentos adicionados para ${owner}!`);
+    }
+
+    function openImportModal() {
+      document.getElementById('importModal').classList.remove('hidden');
+    }
+
+    function closeImportModal() {
+      document.getElementById('importModal').classList.add('hidden');
+    }
+
+    // METAS FUTURAS (BOTÃO TRANSFERIR E BOTÃO ADIAR +1 MÊS)
+    function addFutureGoal() {
+      const name = document.getElementById('goalNameInput').value.trim();
+      const total = parseFloat(document.getElementById('goalTotalInput').value);
+      const months = parseInt(document.getElementById('goalMonthsInput').value);
+
+      if (!name || isNaN(total) || total <= 0 || isNaN(months) || months < 1) {
+        alert('Informe o nome da meta, o valor total e o prazo em meses.');
+        return;
+      }
+
+      state.futureGoals.push({
+        id: 'g_' + Date.now(),
+        name,
+        totalAmount: total,
+        savedAmount: 0,
+        remainingMonths: months,
+        postponedCount: 0,
+        lastActionNote: `Meta criada: ${months}x de ${formatBRL(total / months)}`
+      });
+
+      document.getElementById('goalNameInput').value = '';
+      document.getElementById('goalTotalInput').value = '';
+      saveState();
+      renderAll();
+    }
+
+    function transferGoalMonthlyAmount(goalId) {
+      const goal = state.futureGoals.find(g => g.id === goalId);
+      if (!goal) return;
+
+      const rem = Math.max(0, goal.totalAmount - goal.savedAmount);
+      if (rem <= 0 || goal.remainingMonths <= 0) {
+        alert('Parabéns! Este objetivo já foi 100% concluído!');
+        return;
+      }
+
+      const parcel = rem / goal.remainingMonths;
+      goal.savedAmount = Math.min(goal.totalAmount, goal.savedAmount + parcel);
+      goal.remainingMonths = Math.max(0, goal.remainingMonths - 1);
+      goal.lastActionNote = `✅ Transferiu ${formatBRL(parcel)} neste mês!`;
+
+      const targetPeriod = state.selectedPeriod === 'ALL' ? '2026-10' : state.selectedPeriod;
+      state.transactions.unshift({
+        id: 'goal_tx_' + Date.now(),
+        owner: state.selectedOwner === 'ALL' ? 'Éveli' : state.selectedOwner,
+        source: 'Reserva p/ Meta',
+        period: targetPeriod,
+        date: '15/10/2026',
+        type: 'debit',
+        category: 'Casa, Serviços & Outros',
+        desc: `🎯 Separado p/ Meta: ${goal.name}`,
+        amount: Number(parcel.toFixed(2))
+      });
+
+      saveState();
+      renderAll();
+    }
+
+    function postponeGoalMonth(goalId) {
+      const goal = state.futureGoals.find(g => g.id === goalId);
+      if (!goal) return;
+
+      const rem = Math.max(0, goal.totalAmount - goal.savedAmount);
+      if (rem <= 0) return;
+
+      goal.remainingMonths += 1;
+      goal.postponedCount = (goal.postponedCount || 0) + 1;
+      const newParcel = rem / goal.remainingMonths;
+      goal.lastActionNote = `⏳ Adiado +1 mês! Novo prazo: ${goal.remainingMonths} meses (${formatBRL(newParcel)}/mês).`;
+
+      saveState();
+      renderAll();
+    }
+
+    function deleteFutureGoal(goalId) {
+      state.futureGoals = state.futureGoals.filter(g => g.id !== goalId);
+      saveState();
+      renderAll();
+    }
+
+    // LANÇAMENTO MANUAL
+    function toggleCategoryByType() {
+      const type = document.getElementById('txTypeInput').value;
+      const catSelect = document.getElementById('txCategoryInput');
+      if (type === 'income') {
+        catSelect.innerHTML = `<option value="Receita">💰 Entrada / Salário / Pix (+)</option>`;
+      } else {
+        catSelect.innerHTML = `
+          <option value="Lanches & Restaurantes">🍔 Lanches & Restaurantes</option>
+          <option value="Mercado & Hortifruti">🛒 Mercado & Hortifruti</option>
+          <option value="Uber & Transporte">🚕 Uber & Transporte</option>
+          <option value="Saúde, Farmácia & Academia">💊 Saúde, Farmácia & Academia</option>
+          <option value="Parcelamentos Cartão">📦 Parcelamentos Cartão</option>
+          <option value="Auto Escola & Detran">🚗 Auto Escola & Detran</option>
+          <option value="Casa, Serviços & Outros">🏠 Casa, Serviços & Outros</option>
+        `;
+      }
+    }
+
+    function addManualTransaction() {
+      const owner = document.getElementById('txOwnerInput').value;
+      const type = document.getElementById('txTypeInput').value;
+      const category = document.getElementById('txCategoryInput').value;
+      const desc = document.getElementById('txDescInput').value.trim() || category;
+      const amount = parseFloat(document.getElementById('txAmountInput').value);
+
+      if (isNaN(amount) || amount <= 0) {
+        alert('Digite um valor válido.');
+        return;
+      }
+
+      const targetPeriod = state.selectedPeriod === 'ALL' ? '2026-10' : state.selectedPeriod;
+      state.transactions.unshift({
+        id: 'm_' + Date.now(),
+        owner,
+        source: type === 'card' ? `Cartão ${owner}` : `Conta ${owner}`,
+        period: targetPeriod,
+        date: '15/10/2026',
+        type,
+        category: type === 'income' ? 'Receita' : category,
+        desc,
+        amount
+      });
+
+      document.getElementById('txDescInput').value = '';
+      document.getElementById('txAmountInput').value = '';
+      saveState();
+      renderAll();
+    }
+
+    function deleteTransaction(id) {
+      state.transactions = state.transactions.filter(t => t.id !== id);
+      saveState();
+      renderAll();
+    }
+
+    function editCategoryBudget(cat) {
+      const current = state.budgets[cat] || 300;
+      const input = prompt(`Definir meta mensal da família para "${cat}" (R$):`, current);
+      if (input === null) return;
+      const val = parseFloat(String(input).replace(',', '.'));
+      if (!isNaN(val) && val >= 0) {
+        state.budgets[cat] = val;
+        saveState();
+        renderAll();
+      }
+    }
+
+    // RENDERIZAÇÃO PRINCIPAL
+    function renderAll() {
+      const p = state.selectedPeriod;
+      const owner = state.selectedOwner;
+      const catFilter = document.getElementById('categoryFilterSelect').value;
+
+      document.getElementById('includeCurrentCardBillToggle').checked = !!state.includeCurrentCardBill;
+
+      ['2026-10', '2026-09', '2026-08', 'ALL'].forEach(k => {
+        const b = document.getElementById(`btnPeriod_${k}`);
+        if (b) b.classList.toggle('active', k === p);
+      });
+
+      ['ALL', 'Éveli', 'Marido'].forEach(k => {
+        const b = document.getElementById(`btnOwner_${k}`);
+        if (b) b.classList.toggle('active', k === owner);
+      });
+
+      // Badges de fontes integradas
+      document.getElementById('importedSourcesBadges').innerHTML = state.importedSources.map(s => `
+        <span class="text-[11px] px-2.5 py-1 rounded-full font-bold border ${s.owner === 'Éveli' ? 'bg-orange-50 text-orange-800 border-orange-200' : 'bg-indigo-50 text-indigo-800 border-indigo-200'}">
+          ${s.owner === 'Éveli' ? '👩' : '👨'} ${s.name}
+        </span>
+      `).join('');
+
+      // Filtra transações por período e por titular (Éveli, Marido ou Família)
+      const periodTx = state.transactions.filter(t => {
+        if (p !== 'ALL' && t.period !== p) return false;
+        if (owner !== 'ALL' && t.owner !== owner) return false;
+        if (!state.includeCurrentCardBill && t.source === 'Cartão MC Gold' && t.period === '2026-10') return false;
+        return true;
+      });
+
+      const startInfo = state.periodStartingBalances[p] || { amount: 0, label: 'Saldo Anterior' };
+      const prevBalance = owner === 'Marido' ? 0 : startInfo.amount;
+
+      let totalIncome = 0;
+      let totalBankDebit = 0;
+      let totalCard = 0;
+
+      const spentByCat = {
+        'Lanches & Restaurantes': 0,
+        'Mercado & Hortifruti': 0,
+        'Uber & Transporte': 0,
+        'Parcelamentos Cartão': 0,
+        'Saúde, Farmácia & Academia': 0,
+        'Auto Escola & Detran': 0,
+        'Casa, Serviços & Outros': 0,
+        'Faturas Antigas Pagas': 0
+      };
+
+      periodTx.forEach(t => {
+        if (t.type === 'income') {
+          totalIncome += t.amount;
+        } else {
+          if (t.type === 'card') totalCard += t.amount;
+          else totalBankDebit += t.amount;
+
+          if (spentByCat[t.category] !== undefined) {
+            spentByCat[t.category] += t.amount;
+          } else {
+            spentByCat['Casa, Serviços & Outros'] += t.amount;
+          }
+        }
+      });
+
+      const totalOut = Number((totalBankDebit + totalCard).toFixed(2));
+      const endBalance = Number((prevBalance + totalIncome - totalOut).toFixed(2));
+
+      // Atualiza os 4 Cartões
+      document.getElementById('prevMonthBalanceDisplay').textContent = formatBRL(prevBalance);
+      document.getElementById('subPrevBalance').textContent = startInfo.label;
+
+      document.getElementById('incomeTotalDisplay').textContent = '+ ' + formatBRL(totalIncome);
+      document.getElementById('expenseTotalDisplay').textContent = '- ' + formatBRL(totalOut);
+      document.getElementById('expenseBreakdownSub').textContent =
+        `Conta: ${formatBRL(totalBankDebit)} | Cartões: ${formatBRL(totalCard)}`;
+      document.getElementById('currentMonthTotalDisplay').textContent = formatBRL(endBalance);
+
+      const cardEl = document.getElementById('currentBalanceCard');
+      const statusEl = document.getElementById('currentBalanceStatusText');
+      if (endBalance >= 0) {
+        cardEl.className = 'bg-emerald-600 text-white rounded-2xl p-5 shadow-lg flex flex-col justify-between transition';
+        statusEl.textContent = '✅ Saldo positivo no período selecionado!';
+      } else {
+        cardEl.className = 'bg-rose-600 text-white rounded-2xl p-5 shadow-lg flex flex-col justify-between transition';
+        statusEl.textContent = state.includeCurrentCardBill
+          ? '⚠️ Faltam ' + formatBRL(Math.abs(endBalance)) + ' p/ cobrir conta + fatura de 21/10'
+          : '⚠️ Conta utilizando ' + formatBRL(Math.abs(endBalance)) + ' do Limite LIS';
+      }
+
+      // Atualiza Termômetro Formiguinha
+      const antTotal = (spentByCat['Lanches & Restaurantes'] || 0) + (spentByCat['Uber & Transporte'] || 0);
+      document.getElementById('antExpensesBadge').textContent = formatBRL(antTotal);
+
+      // Renderiza Metas Futuras
+      document.getElementById('futureGoalsContainer').innerHTML = state.futureGoals.map(g => {
+        const rem = Math.max(0, g.totalAmount - g.savedAmount);
+        const pct = Math.min(100, Math.round((g.savedAmount / g.totalAmount) * 100));
+        const parcel = g.remainingMonths > 0 ? (rem / g.remainingMonths) : 0;
+
+        return `
+          <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm flex flex-col justify-between">
+            <div>
+              <div class="flex items-start justify-between gap-2 mb-2">
+                <div>
+                  <h4 class="font-extrabold text-sm text-slate-800">${g.name}</h4>
+                  <span class="text-[11px] text-slate-500">
+                    Total: <strong>${formatBRL(g.totalAmount)}</strong> • Guardado: <strong class="text-emerald-600">${formatBRL(g.savedAmount)}</strong>
+                  </span>
+                </div>
+                <button onclick="deleteFutureGoal('${g.id}')" class="text-slate-300 hover:text-rose-600 text-xs font-bold">✕</button>
+              </div>
+              <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden my-2">
+                <div class="h-full bg-indigo-600 rounded-full transition-all" style="width: ${pct}%;"></div>
+              </div>
+              <div class="bg-slate-50 rounded-xl p-2.5 border border-slate-100 my-2 text-xs">
+                <div class="flex justify-between">
+                  <span class="text-slate-500">Prazo restante:</span>
+                  <strong>${g.remainingMonths} ${g.remainingMonths === 1 ? 'mês' : 'meses'} ${g.postponedCount > 0 ? `(Adiado ${g.postponedCount}x)` : ''}</strong>
+                </div>
+                <div class="flex justify-between mt-1">
+                  <span class="text-slate-500">Separar por mês:</span>
+                  <strong class="text-indigo-700 font-black">${formatBRL(parcel)} / mês</strong>
+                </div>
+              </div>
+              <p class="text-[11px] text-slate-500 italic mb-3">${g.lastActionNote || ''}</p>
+            </div>
+            <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+              <button onclick="transferGoalMonthlyAmount('${g.id}')" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2 px-2 rounded-xl transition">
+                ✅ Transferir Mês
+              </button>
+              <button onclick="postponeGoalMonth('${g.id}')" class="bg-amber-100 hover:bg-amber-200 text-amber-950 font-bold text-xs py-2 px-2 rounded-xl transition">
+                ⏳ Adiar (+1 Mês)
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Renderiza Orçamento por Categoria
+      const catList = [
+        { key: 'Parcelamentos Cartão', icon: '📦' },
+        { key: 'Lanches & Restaurantes', icon: '🍔' },
+        { key: 'Mercado & Hortifruti', icon: '🛒' },
+        { key: 'Auto Escola & Detran', icon: '🚗' },
+        { key: 'Casa, Serviços & Outros', icon: '🏠' },
+        { key: 'Uber & Transporte', icon: '🚕' },
+        { key: 'Saúde, Farmácia & Academia', icon: '💊' }
+      ];
+      if (spentByCat['Faturas Antigas Pagas'] > 0) {
+        catList.push({ key: 'Faturas Antigas Pagas', icon: '💳' });
+      }
+
+      document.getElementById('budgetCategoriesList').innerHTML = catList.map(c => {
+        const spent = spentByCat[c.key] || 0;
+        const limit = state.budgets[c.key] || 400;
+        const pct = limit > 0 ? Math.round((spent / limit) * 100) : 100;
+        const barW = Math.min(100, pct);
+        const color = pct >= 100 ? 'bg-rose-600' : (pct >= 80 ? 'bg-amber-500' : 'bg-emerald-500');
+
+        return `
+          <div class="p-3 rounded-xl border border-slate-100 bg-slate-50">
+            <div class="flex items-center justify-between text-xs mb-1">
+              <span class="font-bold text-slate-800">${c.icon} ${c.key}</span>
+              <button onclick="editCategoryBudget('${c.key}')" class="text-slate-700 hover:text-indigo-600 font-bold">
+                ${formatBRL(spent)} <span class="text-slate-400 font-normal">/ Meta: ${formatBRL(limit)} ✏️</span>
+              </button>
+            </div>
+            <div class="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+              <div class="h-full ${color} transition-all" style="width: ${barW}%;"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Renderiza Lista de Lançamentos Filtrada
+      const visibleTx = catFilter === 'ALL'
+        ? periodTx
+        : periodTx.filter(t => t.category === catFilter);
+
+      document.getElementById('txCountBadge').textContent = `${visibleTx.length} itens`;
+      document.getElementById('transactionsList').innerHTML = visibleTx.map(t => {
+        const isInc = t.type === 'income';
+        const isCard = t.type === 'card';
+        const ownerBadge = t.owner === 'Marido'
+          ? `<span class="text-[10px] bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded-full">👨 Marido • ${t.source}</span>`
+          : `<span class="text-[10px] ${isCard ? 'bg-orange-100 text-orange-800' : 'bg-slate-200 text-slate-700'} font-bold px-2 py-0.5 rounded-full">👩 Éveli • ${t.source}</span>`;
+
+        return `
+          <div class="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition text-xs sm:text-sm">
+            <div class="flex items-center gap-3">
+              <span class="text-[11px] font-bold text-slate-400 w-20 shrink-0">${t.date}</span>
+              <div>
+                <p class="font-bold text-slate-800">${t.desc}</p>
+                <div class="flex flex-wrap items-center gap-1.5 mt-0.5">
+                  ${ownerBadge}
+                  <span class="text-[11px] text-slate-500 font-semibold">${t.category}</span>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 shrink-0">
+              <strong class="${isInc ? 'text-emerald-600' : 'text-rose-600'} font-extrabold">
+                ${isInc ? '+' : '-'} ${formatBRL(t.amount)}
+              </strong>
+              <button onclick="deleteTransaction('${t.id}')" class="text-slate-300 hover:text-rose-600 font-bold" title="Excluir">✕</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    window.addEventListener('DOMContentLoaded', renderAll);
+  </script>
+</body>
+</html>

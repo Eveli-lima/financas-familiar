@@ -1,0 +1,93 @@
+/* ==========================================================================
+   ESTILOS VISUAIS — CENTRAL FINANCEIRA DO CASAL (TEMA AZUL CLARO SUAVE)
+   ========================================================================== */
+
+body {
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background-color: #f0f7ff;
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Barra de rolagem discreta em tom azul celeste com inércia de toque */
+.custom-scroll {
+  -webkit-overflow-scrolling: touch;
+}
+
+.custom-scroll::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb {
+  background: #bae6fd;
+  border-radius: 9999px;
+}
+
+/* Botões de filtro (Pessoa, Período e Escopo) */
+.filter-pill.active {
+  background-color: #ffffff;
+  color: #0369a1;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(2, 132, 199, 0.12);
+}
+
+.scope-pill.active {
+  background-color: #ffffff;
+  color: #0369a1;
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgba(2, 132, 199, 0.10);
+}
+
+/* Abas do Menu Principal */
+.nav-tab {
+  color: #475569;
+  font-weight: 600;
+  border-bottom: 2px solid transparent;
+}
+
+.nav-tab:hover {
+  color: #0284c7;
+  background-color: rgba(240, 249, 255, 0.6);
+}
+
+.nav-tab.active {
+  color: #0369a1;
+  border-bottom-color: #0284c7;
+  background-color: #f0f9ff;
+}
+
+/* ==========================================================================
+   OTIMIZAÇÕES RESPONSIVAS PARA SMARTPHONES & TOUCH (MOBILE UX)
+   ========================================================================== */
+
+/* Previne zoom automático e quebra de layout no iOS Safari ao focar em inputs */
+@media (max-width: 768px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Suporte para telas com entalhe (iPhone Dynamic Island / Notch e Home Indicator) */
+.safe-area-pb {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 10px);
+}
+
+.safe-area-pt {
+  padding-top: max(env(safe-area-inset-top, 0px), 8px);
+}
+
+/* Alvos de toque acessíveis no mobile */
+@media (max-width: 640px) {
+  button, .filter-pill, .nav-tab, input[type="button"], input[type="submit"] {
+    min-height: 38px;
+  }
+}
+
+/* Efeito de toque ativo suave (feedback tátil) no celular */
+@media (hover: none) and (pointer: coarse) {
+  button:active, .filter-pill:active {
+    transform: scale(0.97);
+    transition: transform 0.08s ease;
+  }
+}

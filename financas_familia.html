@@ -1,0 +1,1734 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0284c7" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Finanças" />
+  <meta name="format-detection" content="telephone=no" />
+  <!-- Segurança: Política de Conteúdo (CSP) limita de onde o app pode carregar scripts e para onde pode enviar dados -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; script-src 'self' file: 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' file: 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; worker-src 'self' blob: https://cdnjs.cloudflare.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdnjs.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'" />
+  <meta name="referrer" content="no-referrer" />
+  <link rel="manifest" href="manifest.json" />
+  <title>Central Financeira do Casal — Éveli & Vital</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Biblioteca PDF.js local e offline para ler arquivos PDF de Extratos e Faturas direto no navegador -->
+  <script src="js/pdf.min.js"></script>
+  <script src="js/pdf.worker.min.js"></script>
+  <!-- Cliente Oficial Supabase (Banco de Dados e Autenticação em Nuvem - Etapa 3/4) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
+  <!-- Folha de estilos modularizada (Etapa 2) -->
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body class="pb-28 md:pb-20">
+
+  <!-- =================================================================== -->
+  <!-- TELA DE LOGIN COMPLETA E SEGURA (ÉVELI & VITAL)                     -->
+  <!-- =================================================================== -->
+  <div id="appLoginOverlay" class="fixed inset-0 z-[100] bg-slate-950 flex items-center justify-center p-4 overflow-y-auto">
+    <!-- Fundo decorativo com gradientes suaves e blur -->
+    <div class="fixed inset-0 bg-gradient-to-br from-slate-950 via-sky-950/80 to-slate-950 pointer-events-none"></div>
+    <div class="fixed top-1/4 -left-20 w-96 h-96 bg-sky-500/10 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="fixed bottom-1/4 -right-20 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+    <div class="relative w-full max-w-md bg-slate-900/90 backdrop-blur-2xl border border-sky-400/20 rounded-3xl p-6 sm:p-8 shadow-2xl text-white">
+      <!-- Ícone e Cabeçalho -->
+      <div class="text-center mb-6">
+        <div class="w-16 h-16 mx-auto mb-3 rounded-2xl bg-gradient-to-tr from-sky-600 to-indigo-600 flex items-center justify-center text-3xl shadow-lg shadow-sky-500/30 border border-sky-300/30">
+          <span id="loginAvatarDisplay">👩‍💼</span>
+        </div>
+        <h2 id="loginWelcomeGreeting" class="text-xl sm:text-2xl font-black text-white tracking-tight">Olá, Éveli!</h2>
+        <p class="text-xs text-sky-200/70 mt-1">Finanças da Família • Acesso Seguro Local (Localhost)</p>
+      </div>
+
+      <!-- 1. Seleção de Integrante (Quem está entrando?) -->
+      <div class="mb-5">
+        <label class="block text-[11px] font-bold uppercase tracking-wider text-sky-300/80 mb-2 text-center">
+          Quem está acessando agora?
+        </label>
+        <div class="flex gap-2.5">
+          <button type="button" id="loginProfileBtnEveli" onclick="selectLoginProfile('Éveli')" class="flex-1 py-2.5 px-3 rounded-2xl font-bold text-xs bg-sky-600 text-white shadow-md shadow-sky-600/20 border-2 border-sky-400 flex items-center justify-center gap-2 transition cursor-pointer">
+            <span class="text-base">👩‍💼</span>
+            <span>Éveli</span>
+          </button>
+          <button type="button" id="loginProfileBtnVital" onclick="selectLoginProfile('Vital')" class="flex-1 py-2.5 px-3 rounded-2xl font-semibold text-xs bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border border-slate-700 flex items-center justify-center gap-2 transition cursor-pointer">
+            <span class="text-base">👨‍💼</span>
+            <span>Vital</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 2. Formulário de Senha -->
+      <form onsubmit="submitAppLogin(event)" class="space-y-4">
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="text-xs font-semibold text-slate-300">Senha ou PIN de Acesso</label>
+            <button type="button" onclick="showPasswordHint()" class="text-[11px] text-sky-400 hover:text-sky-300 underline font-medium cursor-pointer">Esqueci / Dica</button>
+          </div>
+          <div class="relative">
+            <input
+              type="password"
+              id="loginPasswordInput"
+              autocomplete="current-password"
+              placeholder="Digite sua senha..."
+              class="w-full bg-slate-950/70 border border-slate-700 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20 rounded-2xl px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition pr-11"
+              required
+            />
+            <button
+              type="button"
+              onclick="togglePasswordVisibility('loginPasswordInput', 'loginEyeIcon')"
+              class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-base cursor-pointer"
+              title="Mostrar / Ocultar Senha"
+            >
+              <span id="loginEyeIcon">👁️</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Opção de Lembrar Sessão -->
+        <div class="flex items-center justify-between text-xs text-slate-400">
+          <label class="inline-flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" id="loginRememberMeToggle" checked class="rounded border-slate-700 bg-slate-800 text-sky-500 focus:ring-0 cursor-pointer" />
+            <span>Manter conectado neste aparelho</span>
+          </label>
+        </div>
+
+        <!-- Mensagem de Feedback (Erro, Bloqueio ou Sucesso) -->
+        <div id="loginFeedbackMsg" class="hidden"></div>
+
+        <!-- Botão Entrar -->
+        <button
+          type="submit"
+          id="loginSubmitBtn"
+          class="w-full py-3.5 px-4 rounded-2xl font-bold text-sm bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white shadow-lg shadow-sky-500/25 transition-all transform active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
+        >
+          <span>Desbloquear Acesso</span>
+          <span>🔓</span>
+        </button>
+      </form>
+
+      <!-- Rodapé com Ações Adicionais e Badges de Segurança -->
+      <div class="mt-6 pt-4 border-t border-slate-800 text-center space-y-3">
+        <div class="flex items-center justify-center gap-4 text-xs">
+          <button type="button" onclick="openChangePasswordModal()" class="text-slate-400 hover:text-sky-300 transition flex items-center gap-1 cursor-pointer">
+            <span>⚙️</span>
+            <span>Alterar Senha de Acesso</span>
+          </button>
+        </div>
+
+        <div class="flex items-center justify-center gap-2 text-[10px] text-slate-500">
+          <span>🔒 Criptografia Local (SHA-256)</span>
+          <span>•</span>
+          <span>🛡️ Anti-Força Bruta</span>
+          <span>•</span>
+          <span>⏱️ Auto-Bloqueio 15min</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =================================================================== -->
+  <!-- CABEÇALHO SUPERIOR EM TOM AZUL CLARO SUAVE (RESPONSIVO DESKTOP/MOBILE)-->
+  <!-- =================================================================== -->
+  <header class="bg-gradient-to-r from-sky-50/95 via-white/95 to-sky-50/95 backdrop-blur-md text-slate-900 border-b border-sky-200/80 sticky top-0 z-40 shadow-sm shadow-sky-900/[0.03]">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-2.5 sm:gap-3">
+      <!-- Título & Marca + Ações Rápidas Mobile -->
+      <div class="flex items-center justify-between w-full md:w-auto gap-2">
+        <div class="flex items-center gap-2.5 sm:gap-3">
+          <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center font-bold text-sm sm:text-base shadow-sm shadow-sky-200 shrink-0">
+            ₣
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 class="font-bold text-sm sm:text-base md:text-lg text-slate-900 tracking-tight leading-tight">Finanças do Casal</h1>
+            </div>
+            <p class="text-[11px] sm:text-xs text-sky-800/70 font-medium">Éveli & Vital • Itaú + Poupança + 2 Cartões</p>
+          </div>
+        </div>
+
+        <!-- Botões de Acesso Rápido Mobile (Bloquear Tela & Gaveta de Mais Opções) -->
+        <div class="flex items-center gap-1.5 md:hidden">
+          <button onclick="lockAppScreen()" class="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 active:scale-95 transition flex items-center justify-center text-sm shadow-2xs" title="Bloquear Tela">
+            🔒
+          </button>
+          <button onclick="openMobileMoreMenu()" class="w-9 h-9 rounded-xl bg-sky-100/90 hover:bg-sky-200 text-sky-900 border border-sky-200 active:scale-95 transition flex items-center justify-center font-bold text-base shadow-2xs" title="Mais Opções & Ferramentas">
+            ☰
+          </button>
+        </div>
+      </div>
+
+      <!-- Escolha de Mês (Único Seletor em Cascata a partir de Setembro) -->
+      <div class="flex items-center gap-1.5 bg-sky-100/70 p-1.5 rounded-xl border border-sky-200/70 w-full md:w-auto justify-between md:justify-start">
+        <label for="periodDropdownSelect" class="text-xs font-semibold text-sky-900 flex items-center gap-1 pl-1 shrink-0">
+          <span>📅</span>
+          <span>Mês:</span>
+        </label>
+        <select id="periodDropdownSelect" onchange="setPeriod(this.value)" class="text-xs font-bold text-slate-800 bg-white border border-sky-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-sky-400 cursor-pointer shadow-2xs flex-1 md:flex-none">
+          <option value="2026-09">Setembro/2026 (Início da Vida Financeira)</option>
+          <option value="2026-10" selected>Outubro/2026 (Mês Atual)</option>
+          <option value="2026-11">Novembro/2026 (Projeção)</option>
+          <option value="2026-12">Dezembro/2026 (Projeção)</option>
+          <option value="2027-01">Janeiro/2027 (Projeção)</option>
+          <option value="ALL">🌐 Consolidado Geral (Todos os Meses)</option>
+        </select>
+      </div>
+
+      <!-- Botões de Ação Desktop (Arquivos & Fotos, Conciliar Mês, Educadora IA e Backup JSON/CSV) -->
+      <div class="hidden md:flex flex-wrap items-center gap-2">
+        <button onclick="openFilesManagerModal()" class="text-xs bg-sky-50 hover:bg-sky-100 text-sky-850 border border-sky-300/80 font-bold px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-2xs cursor-pointer" title="Gerenciar Extratos OFX, Faturas PDF e Fotos de Comprovantes enviados">
+          <span>📁</span>
+          <span>Arquivos & Fotos</span>
+          <span id="headerFilesCountBadge" class="text-[10px] bg-sky-600 text-white px-2 py-0.5 rounded-full font-bold">0</span>
+        </button>
+        <button onclick="openReconciliationModal()" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3.5 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5" title="Abrir Central de Conciliação do Mês (Controle Pessoal vs. Banco e Cartão)">
+          <span>⚖️</span>
+          <span>Conciliar Mês</span>
+        </button>
+        <button onclick="openAiAdvisorModal()" class="text-xs bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-semibold px-3 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5" title="Abrir Dicas e Consultoria da Educadora Financeira IA">
+          <span>✨</span>
+          <span class="font-bold">Educadora IA</span>
+        </button>
+        <button onclick="openBackupModal()" class="text-xs bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-semibold px-3.5 py-2 rounded-xl transition flex items-center gap-1.5">
+          Backup & Dados
+        </button>
+        <button onclick="lockAppScreen()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 font-bold px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-2xs cursor-pointer" title="Bloquear tela por segurança">
+          <span>🔒</span>
+          <span id="headerAuthUserBadge">Bloquear</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- MENU DE NAVEGAÇÃO POR ABAS DESKTOP (CLEAN & AZUL CLARO - oculto em mobile onde vigora a barra inferior fixa) -->
+    <div class="hidden md:block border-t border-sky-100 bg-white/90">
+      <div class="max-w-7xl mx-auto px-4 flex flex-wrap items-center justify-between gap-3">
+        <nav class="flex items-center gap-1 sm:gap-2 overflow-x-auto">
+          <button onclick="setActiveTab('overview')" id="btnTab_overview" class="nav-tab active text-xs sm:text-sm px-3.5 py-3 rounded-t-lg transition whitespace-nowrap flex items-center gap-1.5">
+            <span>📊</span>
+            <span>Visão Geral</span>
+          </button>
+          <button onclick="setActiveTab('banking')" id="btnTab_banking" class="nav-tab text-xs sm:text-sm px-3.5 py-3 rounded-t-lg transition whitespace-nowrap flex items-center gap-1.5">
+            <span>🏦</span>
+            <span>Conta Bancária (Itaú)</span>
+            <span id="navBankTxCountBadge" class="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-semibold">0</span>
+          </button>
+          <button onclick="setActiveTab('cards')" id="btnTab_cards" class="nav-tab text-xs sm:text-sm px-3.5 py-3 rounded-t-lg transition whitespace-nowrap flex items-center gap-1.5">
+            <span>💳</span>
+            <span>Cartões de Crédito</span>
+            <span id="navCardTxCountBadge" class="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-semibold">0</span>
+          </button>
+          <button onclick="setActiveTab('daily')" id="btnTab_daily" class="nav-tab text-xs sm:text-sm px-3.5 py-3 rounded-t-lg transition whitespace-nowrap flex items-center gap-1.5">
+            <span>📝</span>
+            <span>Controle Diário</span>
+            <span id="navDailyCountBadge" class="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-semibold">0</span>
+          </button>
+          <button onclick="setActiveTab('investments')" id="btnTab_investments" class="nav-tab text-xs sm:text-sm px-3.5 py-3 rounded-t-lg transition whitespace-nowrap flex items-center gap-1.5">
+            <span>💰</span>
+            <span>Poupanças & Investimentos</span>
+            <span id="navInvestmentsTotalBadge" class="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-semibold">R$ 0,00</span>
+          </button>
+          <button onclick="setActiveTab('goals')" id="btnTab_goals" class="nav-tab text-xs sm:text-sm px-3.5 py-3 rounded-t-lg transition whitespace-nowrap flex items-center gap-1.5">
+            <span>🎯</span>
+            <span>Metas da Família</span>
+          </button>
+        </nav>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 mt-6 space-y-6">
+
+    <!-- =================================================================== -->
+    <!-- ABA 1: VISÃO GERAL (DIAGNÓSTICO DA IA, DICAS, 4 NÚMEROS-CHAVE, PATRIMÔNIO E HISTÓRICO) -->
+    <!-- =================================================================== -->
+    <div id="tab_overview" class="space-y-6">
+
+      <!-- 1.1 Diagnóstico Educativo & Resumo Descomplicado da IA -->
+      <section id="plainLanguageDiagnosticContainer"></section>
+
+      <!-- 1.2 Dicas & Alertas Proativos da IA (Assistente de Bolso para a Família) -->
+      <section>
+        <div class="flex items-center justify-between mb-2.5">
+          <div class="flex items-center gap-2">
+            <span class="text-base">💡</span>
+            <h3 class="font-bold text-sm sm:text-base text-slate-900">Dicas & Alertas da IA para a Família</h3>
+            <span class="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full uppercase">Inteligência Financeira</span>
+          </div>
+          <span class="text-xs text-slate-500">Orientações automáticas e personalizadas</span>
+        </div>
+        <div id="aiInsightsContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5"></div>
+      </section>
+
+      <!-- 1.3 Os 4 Números-Chave do Mês Selecionado -->
+      <section>
+        <div class="flex items-center justify-between mb-2.5">
+          <div class="flex items-center gap-2">
+            <span class="text-base">📊</span>
+            <h3 class="font-bold text-sm sm:text-base text-slate-900">Fluxo Financeiro do Período</h3>
+          </div>
+          <span class="text-xs text-slate-500">Entradas, saídas e faturas sem misturar contas</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+
+          <!-- Card 1: Saldo Anterior da Conta Conjunta -->
+          <div class="bg-white rounded-2xl p-4 border border-sky-200/70 shadow-sm shadow-sky-900/[0.03] flex flex-col justify-between">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-semibold uppercase tracking-wider text-sky-700/80">1. Saldo Anterior</span>
+              <button onclick="editPrevBalanceManual()" class="text-[11px] text-sky-600 hover:text-sky-800 underline font-medium">Ajustar</button>
+            </div>
+            <div class="mt-2">
+              <div id="prevMonthBalanceDisplay" class="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">R$ 0,00</div>
+              <p id="subPrevBalance" class="text-[11px] text-slate-500 mt-1">Saldo que veio do mês anterior</p>
+            </div>
+          </div>
+
+          <!-- Card 2: Entradas na Conta -->
+          <div class="bg-white rounded-2xl p-4 border border-sky-200/70 shadow-sm shadow-sky-900/[0.03] flex flex-col justify-between">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-semibold uppercase tracking-wider text-sky-700/80">2. Entradas (+)</span>
+              <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            </div>
+            <div class="mt-2">
+              <div id="incomeTotalDisplay" class="text-xl sm:text-2xl font-bold text-emerald-600 tracking-tight">+ R$ 0,00</div>
+              <p id="incomeCountSub" class="text-[11px] text-slate-500 mt-1">Receitas e depósitos na conta conjunta</p>
+            </div>
+          </div>
+
+          <!-- Card 3: Saídas Diretas da Conta Conjunta (Caixa) -->
+          <div class="bg-white rounded-2xl p-4 border border-sky-200/70 shadow-sm shadow-sky-900/[0.03] flex flex-col justify-between">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-semibold uppercase tracking-wider text-sky-700/80">3. Saídas da Conta (-)</span>
+              <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+            </div>
+            <div class="mt-2">
+              <div id="bankDebitTotalDisplay" class="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">- R$ 0,00</div>
+              <p id="bankBalanceNowSub" class="text-[11px] font-medium text-slate-500 mt-1">Saldo em conta: R$ 0,00</p>
+            </div>
+          </div>
+
+          <!-- Card 4: Faturas dos Cartões no Mês (Competência + Conciliação) -->
+          <div class="bg-white rounded-2xl p-4 border border-sky-200/70 shadow-sm shadow-sky-900/[0.03] flex flex-col justify-between">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-semibold uppercase tracking-wider text-sky-700/80">4. Fatura dos Cartões (-)</span>
+              <span id="invoiceReconciliationBadge" class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700">Aberto</span>
+            </div>
+            <div class="mt-2">
+              <div id="cardTotalDisplay" class="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">- R$ 0,00</div>
+              <p id="cardBreakdownSub" class="text-[11px] text-slate-500 mt-1">Éveli: R$ 0,00 | Vital: R$ 0,00</p>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Elemento invisível mantido para compatibilidade total com eventuais rotinas -->
+        <div id="currentBalanceCard" class="hidden">
+          <div id="currentMonthTotalDisplay"></div>
+          <span id="balanceDotIndicator"></span>
+          <span id="currentBalanceStatusText"></span>
+        </div>
+      </section>
+
+      <!-- 1.4 Os 4 Pilares Financeiros: Conta Conjunta Itaú + Poupanças & Investimentos + 2 Cartões -->
+      <section>
+        <div class="flex items-center justify-between mb-2.5">
+          <div class="flex items-center gap-2">
+            <span class="text-base">🏛️</span>
+            <h3 class="font-bold text-sm sm:text-base text-slate-900">Pilares do Patrimônio & Contas da Família</h3>
+          </div>
+          <span class="text-xs text-slate-500">Saldos e limites em tempo real</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="accountsAndCardsSection"></div>
+      </section>
+
+      <!-- 1.5 Metas da Família & Dúvidas Frequentes Explicadas para Leigos -->
+      <section class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Card 1: 🎯 Metas da Família -->
+        <div id="overviewGoalsSummaryCard" class="bg-white border border-sky-200/70 shadow-sm shadow-sky-900/[0.03] rounded-2xl p-5 flex flex-col justify-between"></div>
+
+        <!-- Card 2: 🎓 Educador Financeiro - FAQ para Leigos -->
+        <div id="financialCoachFaqCard" class="bg-white border border-sky-200/70 shadow-sm shadow-sky-900/[0.03] rounded-2xl p-5 flex flex-col justify-between"></div>
+
+        <!-- Elementos invisíveis mantidos para compatibilidade de eventuais scripts -->
+        <div class="hidden">
+          <div id="scopeSplitSummary"></div>
+          <div id="importedSourcesBadges"></div>
+        </div>
+      </section>
+
+      <!-- 1.6 QUADRO DE RESUMO ANUAL: ENTRADAS E SAÍDAS DA CONTA DE CADA MÊS, TOTAL MENSAL E TOTAIS GERAIS -->
+      <section id="consolidatedAllMonthsSection" class="bg-white border border-sky-200/80 shadow-sm shadow-sky-900/[0.03] rounded-2xl p-5 mb-4"></section>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- ABA 2: CONTA BANCÁRIA (EXTRATO EXCLUSIVO DA CONTA CORRENTE ITAÚ)     -->
+    <!-- =================================================================== -->
+    <div id="tab_banking" class="hidden space-y-6">
+
+      <!-- Cabeçalho e Resumo do Saldo da Conta Bancária -->
+      <section class="bg-white border border-sky-200/70 shadow-sm shadow-sky-900/[0.03] rounded-2xl p-5">
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-4 mb-4 border-b border-sky-100">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xl">🏦</span>
+              <h3 class="font-bold text-base sm:text-lg text-slate-900">Conta Corrente Itaú (Conjunta)</h3>
+              <span class="text-[10px] font-semibold bg-sky-50 text-sky-700 px-2 py-0.5 rounded-full border border-sky-200">Éveli & Vital</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">
+              Extrato exclusivo do dinheiro real na conta: entradas salariais, saídas de débito, PIX e quitações de faturas
+            </p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="document.getElementById('bankOfxFileInput').click()" class="text-xs bg-sky-600 hover:bg-sky-700 text-white font-semibold px-3.5 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5" title="Importar arquivo .OFX baixado do Itaú (qualquer mês: Setembro, Outubro, etc.)">
+              <span>📥</span>
+              <span>Importar Extrato OFX (.ofx)</span>
+            </button>
+            <input type="file" id="bankOfxFileInput" accept=".ofx" onchange="handleBankOfxUpload(event)" class="hidden" />
+            <button onclick="editPrevBalanceManual()" class="text-xs bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-semibold px-3 py-2 rounded-xl transition flex items-center gap-1" title="Ajustar manualmente o saldo inicial da conta">
+              <span>✏️</span>
+              <span>Ajustar Saldo</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 5 Cards de Resumo da Conta no Período -->
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div class="bg-slate-50/80 p-3 rounded-xl border border-slate-200/70">
+            <span class="text-[10px] font-semibold uppercase text-slate-500 block">1. Saldo Inicial</span>
+            <strong id="bankTabPrevBalance" class="text-sm sm:text-base font-bold text-slate-800 block mt-1">R$ 0,00</strong>
+            <span class="text-[10px] text-slate-400">Início do mês</span>
+          </div>
+
+          <div class="bg-emerald-50/60 p-3 rounded-xl border border-emerald-200/70">
+            <span class="text-[10px] font-semibold uppercase text-emerald-800 block">2. Entradas (+)</span>
+            <strong id="bankTabIncome" class="text-sm sm:text-base font-bold text-emerald-700 block mt-1">+ R$ 0,00</strong>
+            <span class="text-[10px] text-emerald-600/80">Salários e PIX</span>
+          </div>
+
+          <div class="bg-slate-50/80 p-3 rounded-xl border border-slate-200/70">
+            <span class="text-[10px] font-semibold uppercase text-slate-600 block">3. Saídas Conta (-)</span>
+            <strong id="bankTabDebit" class="text-sm sm:text-base font-bold text-slate-900 block mt-1">- R$ 0,00</strong>
+            <span class="text-[10px] text-slate-500">Boletos, PIX e Débito</span>
+          </div>
+
+          <div class="bg-sky-50/60 p-3 rounded-xl border border-sky-200/70">
+            <span class="text-[10px] font-semibold uppercase text-sky-800 block">4. Faturas Pagas (🧾)</span>
+            <strong id="bankTabInvoices" class="text-sm sm:text-base font-bold text-sky-900 block mt-1">R$ 0,00</strong>
+            <span class="text-[10px] text-sky-700/80">Débito em conta</span>
+          </div>
+
+          <div class="col-span-2 sm:col-span-1 bg-sky-100/60 p-3 rounded-xl border border-sky-300/70">
+            <span class="text-[10px] font-semibold uppercase text-sky-900 block">5. Saldo na Conta Hoje (=)</span>
+            <strong id="bankTabEnding" class="text-sm sm:text-base font-bold text-sky-950 block mt-1">R$ 0,00</strong>
+            <span class="text-[10px] text-slate-600">Disponível no Itaú</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Extrato e Lançamentos da Conta Bancária -->
+      <section class="bg-white border border-sky-200/70 shadow-sm shadow-sky-900/[0.03] rounded-2xl p-5">
+
+        <!-- Barra de Busca e Filtros do Extrato Bancário -->
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5 mb-4">
+          <div class="sm:col-span-5">
+            <input id="bankTxSearchInput" type="text" oninput="renderAll()" placeholder="Buscar no extrato por descrição, valor..." class="w-full text-xs border border-sky-200/80 rounded-xl px-3 py-2 bg-sky-50/40 focus:bg-white focus:outline-none focus:border-sky-400" />
+          </div>
+          <div class="sm:col-span-4">
+            <select id="bankTypeFilterSelect" onchange="renderAll()" class="w-full text-xs border border-sky-200/80 rounded-xl px-2.5 py-2 bg-sky-50/40 font-medium text-slate-700">
+              <option value="ALL">Todas as Movimentações da Conta</option>
+              <option value="income">💰 Só Entradas / Receitas (+)</option>
+              <option value="expense">💸 Só Saídas / Pagamentos (-)</option>
+              <option value="invoice_payment">🧾 Só Faturas Pagas</option>
+            </select>
+          </div>
+          <div class="sm:col-span-3">
+            <select id="bankCategoryFilterSelect" onchange="renderAll()" class="w-full text-xs border border-sky-200/80 rounded-xl px-2.5 py-2 bg-sky-50/40 font-medium text-slate-700">
+              <option value="ALL">Todas as Categorias</option>
+              <option value="Casa, Serviços & Outros">Moradia, Aluguel & Condomínio</option>
+              <option value="Contas de Consumo">Água, Luz, Gás & Internet</option>
+              <option value="Mercado & Hortifruti">Supermercado & Feira</option>
+              <option value="Saúde, Farmácia & Academia">Saúde & Farmácia</option>
+              <option value="Receita">Receita / Salário</option>
+              <option value="Faturas Antigas Pagas">Faturas Pagas</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Lista Rolável do Extrato Bancário Exclusivo -->
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold text-slate-700">Movimentações Bancárias no Mês</span>
+          <span id="bankTxCountBadge" class="text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200/70 px-2.5 py-0.5 rounded-full">0 itens</span>
+        </div>
+        <div id="bankTransactionsList" class="space-y-1.5 max-h-[580px] overflow-y-auto custom-scroll pr-1"></div>
+      </section>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- ABA 3: CARTÕES DE CRÉDITO (FATURAS, COMPRAS, LIMITES E PARCELAS)     -->
+    <!-- =================================================================== -->
+    <div id="tab_cards" class="hidden space-y-6">
+
+      <!-- Barra Superior com Botão de Importar Fatura em PDF -->
+      <section class="bg-white border border-sky-200/70 shadow-sm shadow-sky-900/[0.03] rounded-2xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="text-xl">💳</span>
+            <h3 class="font-bold text-base sm:text-lg text-slate-900">Cartões de Crédito (Éveli & Vital)</h3>
+          </div>
+          <p class="text-xs text-slate-500 mt-0.5">
+            Acompanhe compras, limites, parcelamentos futuros e importe suas faturas oficiais em formato PDF
+          </p>
+        </div>
+        <div>
+          <button onclick="document.getElementById('cardPdfFileInput').click()" class="text-xs bg-sky-600 hover:bg-sky-700 text-white font-semibold px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5" title="Selecione o arquivo PDF da fatura do cartão">
+            <span>📥</span>
+            <span>Importar Fatura em PDF (.pdf)</span>
+          </button>
+          <input type="file" id="cardPdfFileInput" accept=".pdf" onchange="handleCardPdfUpload(event)" class="hidden" />
+        </div>
+      </section>
+
+      <!-- Cabeçalho e Painéis dos 2 Cartões (Éveli & Vital) -->
+      <section class="grid grid-cols-1 md:grid-cols-2 gap-4" id="cardsTabHeaderSection"></section>
+
+      <!-- Radar de Projeção de Parcelamentos -->
+      <section class="bg-white border border-sky-200/70 shadow-sm shadow-sky-900/[0.03] rounded-2xl p-5 sm:p-6">
+        <div class="flex flex-wrap items-center justify-between gap-4 pb-4 mb-4 border-b border-sky-100">
+          <div>
+            <span class="text-[11px] font-semibold uppercase tracking-wider text-sky-700/80">
+              Projeção de Parcelamentos nos Cartões
+            </span>
+            <h3 id="radarHeadline" class="text-base sm:text-lg font-bold text-slate-900 mt-0.5">
+              Carregando análise de parcelas...
+            </h3>
+          </div>
+          <div id="radarLimitsBox" class="text-right bg-sky-50/70 px-3.5 py-2 rounded-xl border border-sky-200/70 text-xs text-slate-600"></div>
+        </div>
+
+        <div id="radarInstallmentsGrid" class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs"></div>
+      </section>
+
+      <!-- Lista e Extrato de Compras dos Cartões de Crédito -->
+      <section class="bg-white border border-sky-200/70 shadow-sm shadow-sky-900/[0.03] rounded-2xl p-5">
+        <!-- Barra de Busca e Filtros das Compras dos Cartões -->
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5 mb-4">
+          <div class="sm:col-span-4">
+            <input id="cardTxSearchInput" type="text" oninput="renderAll()" placeholder="Buscar compras por descrição, valor..." class="w-full text-xs border border-sky-200/80 rounded-xl px-3 py-2 bg-sky-50/40 focus:bg-white focus:outline-none focus:border-sky-400" />
+          </div>
+          <div class="sm:col-span-3">
+            <select id="cardAccountFilterSelect" onchange="renderAll()" class="w-full text-xs border border-sky-200/80 rounded-xl px-2.5 py-2 bg-sky-50/40 font-medium text-slate-700">
+              <option value="ALL">Todos os Cartões</option>
+              <option value="card_eveli_5544">Só Cartão Éveli (MC Gold)</option>
+              <option value="card_marido">Só Cartão Vital</option>
+            </select>
+          </div>
+          <div class="sm:col-span-3">
+            <select id="cardCategoryFilterSelect" onchange="renderAll()" class="w-full text-xs border border-sky-200/80 rounded-xl px-2.5 py-2 bg-sky-50/40 font-medium text-slate-700">
+              <option value="ALL">Todas as Categorias</option>
+              <option value="Lanches & Restaurantes">Lanches & Restaurantes</option>
+              <option value="Mercado & Hortifruti">Mercado & Hortifruti</option>
+              <option value="Uber & Transporte">Uber & Transporte</option>
+              <option value="Saúde, Farmácia & Academia">Saúde & Farmácia</option>
+              <option value="Auto Escola & Detran">Auto Escola & Detran</option>
+              <option value="Casa, Serviços & Outros">Casa & Serviços</option>
+              <option value="Parcelamentos Cartão">Só Parcelamentos</option>
+            </select>
+          </div>
+          <div class="sm:col-span-2">
+            <select id="cardInstallmentsFilterSelect" onchange="renderAll()" class="w-full text-xs border border-sky-200/80 rounded-xl px-2.5 py-2 bg-sky-50/40 font-medium text-slate-700">
+              <option value="ALL">À Vista + Parceladas</option>
+              <option value="parceladas">Só Parceladas (2x+)</option>
+              <option value="avista">Só À Vista (1x)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Lista Rolável das Compras no Cartão -->
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold text-slate-700">Compras Faturadas neste Mês</span>
+          <span id="cardTxCountBadge" class="text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200/70 px-2.5 py-0.5 rounded-full">0 compras</span>
+        </div>
+        <div id="cardTransactionsList" class="space-y-1.5 max-h-[580px] overflow-y-auto custom-scroll pr-1"></div>
+      </section>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- ABA: CONTROLE PESSOAL DE GASTOS DIÁRIOS & FOTO DE NOTAS FISCAIS     -->
+    <!-- =================================================================== -->
+    <div id="tab_daily" class="hidden space-y-6">
+
+      <!-- Banner de Cabeçalho & Conciliação Mensal -->
+      <section class="bg-gradient-to-r from-sky-50 via-indigo-50/40 to-white border border-sky-200/80 rounded-2xl p-5 shadow-sm shadow-sky-900/[0.03]">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-sky-600 to-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-sm shrink-0">
+              📝
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="font-bold text-base sm:text-lg text-slate-900">Controle Pessoal de Gastos Diários</h3>
+                <span class="text-[10px] font-semibold bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full uppercase">Dia a Dia</span>
+              </div>
+              <p class="text-xs text-slate-500 mt-0.5">
+                Anote seus gastos diários ou fotografe notas fiscais. Todo dia 1º, concilie seus registros com o extrato do mês anterior!
+              </p>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button id="btnReconcilePrevMonth" class="text-xs bg-sky-600 hover:bg-sky-700 text-white font-semibold px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5" title="Cruza automaticamente os gastos diários do mês anterior com os extratos e faturas">
+              <span>🔍</span>
+              <span>Conciliar Mês Anterior c/ o Banco</span>
+            </button>
+            <button id="btnReconcileCurMonth" class="text-xs bg-white hover:bg-sky-50 text-sky-800 border border-sky-200 font-semibold px-3 py-2.5 rounded-xl shadow-xs transition flex items-center gap-1">
+              <span>⚡</span>
+              <span>Conciliar Mês Atual</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4 Cards de Resumo dos Gastos Diários no Mês -->
+      <section class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div class="bg-white p-4 rounded-2xl border border-sky-200/70 shadow-sm flex flex-col justify-between">
+          <span class="text-[10px] font-semibold uppercase text-slate-500">1. Total de Gastos Diários</span>
+          <strong id="dailyTotalSpentDisplay" class="text-lg sm:text-xl font-bold text-slate-900 mt-1">R$ 0,00</strong>
+          <span class="text-[10px] text-slate-400">Saídas anotadas</span>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border border-emerald-200/70 shadow-sm flex flex-col justify-between">
+          <span class="text-[10px] font-semibold uppercase text-emerald-800">2. Entradas Diárias</span>
+          <strong id="dailyTotalIncomeDisplay" class="text-lg sm:text-xl font-bold text-emerald-600 mt-1">+ R$ 0,00</strong>
+          <span class="text-[10px] text-emerald-600/80">Receitas avulsas</span>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border border-sky-200/70 shadow-sm flex flex-col justify-between">
+          <span class="text-[10px] font-semibold uppercase text-sky-800">3. Conciliados com o Banco</span>
+          <strong id="dailyReconciledDisplay" class="text-lg sm:text-xl font-bold text-sky-800 mt-1">0 itens</strong>
+          <span class="text-[10px] text-emerald-600 font-medium">Confirmados no extrato</span>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border border-amber-200/70 shadow-sm flex flex-col justify-between">
+          <span class="text-[10px] font-semibold uppercase text-amber-800">4. Pendentes</span>
+          <strong id="dailyPendingDisplay" class="text-lg sm:text-xl font-bold text-amber-700 mt-1">0 itens</strong>
+          <span class="text-[10px] text-amber-600/80">Aguardando conciliação</span>
+        </div>
+      </section>
+
+      <!-- Formulário de Lançamento Diário (Escrever ou Fotografar Nota Fiscal) -->
+      <section class="bg-white border border-sky-200/70 shadow-sm shadow-sky-900/[0.03] rounded-2xl p-5">
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-3 mb-4 border-b border-sky-100">
+          <div>
+            <h4 class="font-bold text-sm sm:text-base text-slate-900">Novo Lançamento Diário</h4>
+            <p class="text-xs text-slate-500">Escreva o gasto ou anexe a foto da nota fiscal para arquivar e conciliar</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="document.getElementById('receiptFileInput').click()" class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 font-semibold px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-xs">
+              <span>📷</span>
+              <span>Tirar Foto / Anexar Nota</span>
+            </button>
+            <input type="file" id="receiptFileInput" accept="image/*" capture="environment" onchange="handleReceiptPhotoUpload(event)" class="hidden" />
+          </div>
+        </div>
+
+        <!-- Pré-visualização da Foto da Nota Fiscal (quando anexada) -->
+        <div id="receiptPreviewBox" class="hidden mb-4 p-3 bg-indigo-50/50 border border-indigo-200 rounded-xl flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <img id="receiptPreviewImg" src="" alt="Nota Fiscal" class="w-14 h-14 object-cover rounded-lg border border-indigo-200 shadow-xs" />
+            <div>
+              <span class="text-xs font-bold text-indigo-950 block">📷 Foto da Nota Fiscal Anexada</span>
+              <span class="text-[10px] text-indigo-700">Esta imagem será guardada com o lançamento diário</span>
+            </div>
+          </div>
+          <button type="button" onclick="removeReceiptPhoto()" class="text-xs text-rose-600 hover:text-rose-800 font-bold px-2 py-1">✕ Remover Foto</button>
+        </div>
+
+        <form id="dailyExpenseForm" onsubmit="saveDailyExpense(event)" class="grid grid-cols-1 sm:grid-cols-12 gap-3.5 text-xs">
+          <!-- Valor -->
+          <div class="sm:col-span-3">
+            <label class="block font-bold text-slate-700 mb-1">Valor (R$) *</label>
+            <input type="number" inputmode="decimal" step="0.01" min="0.01" id="dailyAmount" placeholder="0,00" required class="w-full border border-sky-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-900 focus:outline-none focus:border-sky-400" />
+          </div>
+
+          <!-- Tipo de Transação -->
+          <div class="sm:col-span-3">
+            <label class="block font-bold text-slate-700 mb-1">Forma de Pagamento *</label>
+            <select id="dailyPaymentMethod" onchange="document.getElementById('dailyCardHolderBox').classList.toggle('hidden', this.value !== 'credit_card')" class="w-full border border-sky-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 bg-white focus:outline-none focus:border-sky-400">
+              <option value="pix">💠 PIX</option>
+              <option value="debit_card">💳 Cartão de Débito (Itaú)</option>
+              <option value="credit_card">💳 Cartão de Crédito</option>
+              <option value="cash">💵 Dinheiro Vivo</option>
+              <option value="other">Outros</option>
+            </select>
+          </div>
+
+          <!-- Titular do Cartão (aparece se for crédito) -->
+          <div id="dailyCardHolderBox" class="hidden sm:col-span-2">
+            <label class="block font-bold text-slate-700 mb-1">Titular do Cartão</label>
+            <select id="dailyCardHolder" class="w-full border border-sky-200 rounded-xl px-2.5 py-2 text-xs font-medium text-slate-800 bg-white">
+              <option value="Éveli">Cartão Éveli (5544)</option>
+              <option value="Vital">Cartão Vital</option>
+            </select>
+          </div>
+
+          <!-- Direção: Entrada ou Saída -->
+          <div class="sm:col-span-2">
+            <label class="block font-bold text-slate-700 mb-1">Tipo</label>
+            <div class="flex items-center gap-2 pt-1.5">
+              <label class="inline-flex items-center gap-1 text-slate-700 cursor-pointer font-medium">
+                <input type="radio" name="dailyDirection" value="expense" checked class="text-rose-600 focus:ring-0" />
+                <span>🔴 Saída</span>
+              </label>
+              <label class="inline-flex items-center gap-1 text-slate-700 cursor-pointer font-medium">
+                <input type="radio" name="dailyDirection" value="income" class="text-emerald-600 focus:ring-0" />
+                <span>🟢 Entrada</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Data -->
+          <div class="sm:col-span-2">
+            <label class="block font-bold text-slate-700 mb-1">Data *</label>
+            <input type="date" id="dailyDate" required class="w-full border border-sky-200 rounded-xl px-2.5 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-sky-400" />
+          </div>
+
+          <!-- Descrição -->
+          <div class="sm:col-span-7">
+            <label class="block font-bold text-slate-700 mb-1">Descrição do Gasto *</label>
+            <input type="text" id="dailyDesc" placeholder="Ex: Mercado Prezunic, Padaria, Farmácia, Combustível..." required class="w-full border border-sky-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-sky-400" />
+          </div>
+
+          <!-- Categoria -->
+          <div class="sm:col-span-3">
+            <div class="flex items-center justify-between mb-1">
+              <label class="block font-bold text-slate-700">Categoria</label>
+              <button type="button" onclick="promptAddNewCategory('dailyCategory')" class="text-[11px] text-sky-600 hover:text-sky-800 font-semibold underline">+ Nova Categoria</button>
+            </div>
+            <select id="dailyCategory" onchange="handleCategorySelectChange(this)" class="w-full border border-sky-200 rounded-xl px-2.5 py-2 text-xs font-medium text-slate-800 bg-white">
+              <option value="Mercado & Hortifruti">Mercado & Hortifruti</option>
+              <option value="Lanches & Restaurantes">Lanches & Restaurantes</option>
+              <option value="Uber & Transporte">Uber & Transporte</option>
+              <option value="Saúde, Farmácia & Academia">Saúde & Farmácia</option>
+              <option value="Casa, Serviços & Outros">Casa & Serviços</option>
+              <option value="Auto Escola & Detran">Auto Escola & Detran</option>
+              <option value="Outros" selected>Outros</option>
+              <option value="__NEW__">➕ Criar Nova Categoria...</option>
+            </select>
+          </div>
+
+          <!-- Botão Salvar -->
+          <div class="sm:col-span-2 flex items-end">
+            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-xl shadow-sm transition flex items-center justify-center gap-1">
+              <span>💾</span>
+              <span>Salvar</span>
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <!-- Lista de Gastos Diários do Mês -->
+      <section class="bg-white border border-sky-200/70 shadow-sm shadow-sky-900/[0.03] rounded-2xl p-5">
+        <div class="flex items-center justify-between pb-3 mb-3 border-b border-sky-100">
+          <div>
+            <h4 class="font-bold text-sm sm:text-base text-slate-900">Histórico de Gastos Diários</h4>
+            <p class="text-xs text-slate-500">Lançamentos anotados e status de conciliação com o extrato bancário</p>
+          </div>
+          <span id="dailyExpenseCountBadge" class="text-xs font-semibold bg-sky-50 text-sky-800 border border-sky-200/80 px-2.5 py-0.5 rounded-full">0 itens</span>
+        </div>
+        <div id="dailyExpensesList" class="space-y-2 max-h-[600px] overflow-y-auto custom-scroll pr-1"></div>
+      </section>
+
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- ABA 4: POUPANÇAS & INVESTIMENTOS (TESOURO DIRETO, ITAÚ & CAIXA)       -->
+    <!-- =================================================================== -->
+    <div id="tab_investments" class="hidden space-y-6">
+
+      <!-- Barra de Destaque Superior: Total Guardado, Rendimento e Ações -->
+      <section class="bg-gradient-to-r from-emerald-600 via-teal-600 to-sky-700 text-white rounded-3xl p-6 sm:p-7 shadow-lg shadow-emerald-950/10">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-xl">💰</span>
+              <h2 class="text-lg sm:text-xl font-bold tracking-tight">Poupanças & Investimentos da Família</h2>
+              <span class="text-[10px] font-bold bg-white/20 text-white px-2.5 py-0.5 rounded-full uppercase tracking-wider backdrop-blur-xs">100% Independentes</span>
+            </div>
+            <p class="text-xs text-emerald-100 max-w-2xl leading-relaxed">
+              Economias e patrimônio investido. Estes valores ficam totalmente protegidos e isolados dos gastos diários da conta e das faturas de cartão.
+            </p>
+          </div>
+
+          <!-- Botões de Atualização: Imagem / Print e Por Escrito -->
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="openInvestmentImageModal()" class="text-xs bg-white text-emerald-800 hover:bg-emerald-50 font-bold px-3.5 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+              <span>📷</span>
+              <span>Atualizar por Imagem / Print</span>
+            </button>
+            <button onclick="openInvestmentEditModal()" class="text-xs bg-emerald-500/30 hover:bg-emerald-500/40 text-white border border-white/30 font-semibold px-3.5 py-2.5 rounded-xl backdrop-blur-xs transition flex items-center gap-1.5 cursor-pointer">
+              <span>✏️</span>
+              <span>Atualizar por Escrito</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Indicadores Rápidos de Patrimônio no Mês Selecionado -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mt-6 pt-5 border-t border-white/15">
+          <div class="bg-white/10 backdrop-blur-xs rounded-2xl p-4 border border-white/10">
+            <span class="text-[11px] text-emerald-200 block font-medium">Total Guardado & Investido</span>
+            <strong id="investmentsTotalDisplay" class="text-xl sm:text-2xl font-black text-white mt-0.5 block">R$ 0,00</strong>
+            <span id="investmentsTotalSubLabel" class="text-[10px] text-emerald-100/80 mt-1 block">Tesouro Direto + Poupança Itaú + Poupança Caixa</span>
+          </div>
+
+          <div class="bg-white/10 backdrop-blur-xs rounded-2xl p-4 border border-white/10">
+            <span class="text-[11px] text-emerald-200 block font-medium">Rendimento Bruto no Mês</span>
+            <strong id="investmentsEarningsDisplay" class="text-xl sm:text-2xl font-black text-emerald-300 mt-0.5 block">+ R$ 0,00</strong>
+            <span id="investmentsEarningsSubLabel" class="text-[10px] text-emerald-100/80 mt-1 block">Rendimento do Tesouro + Poupança no período</span>
+          </div>
+
+          <div class="bg-white/10 backdrop-blur-xs rounded-2xl p-4 border border-white/10">
+            <span class="text-[11px] text-emerald-200 block font-medium">Situação dos Ativos</span>
+            <strong class="text-base sm:text-lg font-bold text-white mt-0.5 block">3 Reservas Ativas</strong>
+            <span class="text-[10px] text-emerald-100/80 mt-1 block">Renda Fixa Pública + Poupanças</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Grade dos 3 Ativos: Tesouro Direto, Poupança Itaú e Poupança Caixa -->
+      <section id="investmentCardsGrid" class="grid grid-cols-1 md:grid-cols-3 gap-5"></section>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- ABA 5: METAS DA FAMÍLIA & ORÇAMENTOS (PLANEJAMENTO INDEPENDENTE)     -->
+    <!-- =================================================================== -->
+    <div id="tab_goals" class="hidden space-y-6">
+
+      <!-- Banner de Metas e Sonhos -->
+      <section class="bg-gradient-to-r from-sky-50 via-indigo-50/40 to-white border border-sky-200/80 rounded-2xl p-5 shadow-sm shadow-sky-900/[0.03]">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-sm shrink-0">
+            🎯
+          </div>
+          <div>
+            <h3 class="font-bold text-base sm:text-lg text-slate-900">Metas & Sonhos da Família</h3>
+            <p class="text-xs text-slate-500 mt-0.5">
+              Planejamento independente de objetivos (Viagens, Reforma, Reserva de Emergência). Sem débitos automáticos que interfiram na conta do dia a dia.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Coluna da Esquerda: Orçamento por Categoria -->
+        <div class="lg:col-span-5 bg-white rounded-2xl border border-sky-200/70 shadow-sm shadow-sky-900/[0.03] p-6">
+          <div class="flex items-center justify-between border-b border-sky-100 pb-3 mb-4">
+            <div>
+              <h3 class="font-bold text-base text-slate-900">Teto por Categoria</h3>
+              <p class="text-xs text-slate-500">Gastos líquidos da família no período</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button type="button" onclick="promptAddNewCategoryForBudget()" class="text-xs bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200/80 px-2.5 py-1 rounded-xl font-semibold transition flex items-center gap-1 shadow-xs" title="Criar nova categoria com teto mensal">
+                <span>➕</span>
+                <span>Nova Categoria</span>
+              </button>
+            </div>
+          </div>
+          <div id="budgetCategoriesList" class="space-y-2.5"></div>
+        </div>
+
+        <!-- Coluna da Direita: Cadastro e Acompanhamento de Metas -->
+        <div class="lg:col-span-7 bg-white rounded-2xl border border-sky-200/70 shadow-sm shadow-sky-900/[0.03] p-6">
+          <div class="flex flex-wrap items-center justify-between gap-4 border-b border-sky-100 pb-3 mb-4">
+            <div>
+              <h2 class="text-base font-bold text-slate-900">Metas Cadastradas</h2>
+              <p class="text-xs text-slate-500">Acompanhe o valor guardado e o prazo em meses</p>
+            </div>
+          </div>
+
+          <div class="bg-sky-50/60 p-4 rounded-2xl border border-sky-200/70 mb-5">
+            <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+              <div class="sm:col-span-4">
+                <label class="block text-[11px] font-medium text-sky-900 mb-1">Nome da Meta</label>
+                <input id="goalNameInput" type="text" placeholder="Ex: Viagem, Reforma, Carro..." class="w-full text-xs border border-sky-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:border-sky-400" />
+              </div>
+              <div class="sm:col-span-3">
+                <label class="block text-[11px] font-medium text-sky-900 mb-1">Valor Alvo (R$)</label>
+                <input id="goalTotalInput" type="number" inputmode="decimal" step="10" min="1" placeholder="Ex: 5000" class="w-full text-xs border border-sky-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:border-sky-400" />
+              </div>
+              <div class="sm:col-span-2">
+                <label class="block text-[11px] font-medium text-sky-900 mb-1">Já Guardado (R$)</label>
+                <input id="goalSavedInput" type="number" inputmode="decimal" step="10" min="0" placeholder="0,00" class="w-full text-xs border border-sky-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:border-sky-400" />
+              </div>
+              <div class="sm:col-span-1">
+                <label class="block text-[11px] font-medium text-sky-900 mb-1">Meses</label>
+                <input id="goalMonthsInput" type="number" min="1" max="120" value="6" class="w-full text-xs border border-sky-200 rounded-xl px-2 py-2 bg-white focus:outline-none focus:border-sky-400 text-center" />
+              </div>
+              <div class="sm:col-span-2 flex items-end">
+                <button onclick="addFutureGoal()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs py-2 px-3 rounded-xl shadow-sm transition">
+                  + Criar Meta
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div id="futureGoalsContainer" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+        </div>
+
+      </section>
+    </div>
+
+  </main>
+
+  <!-- =================================================================== -->
+  <!-- MODAL: EDITAR META DA FAMÍLIA                                       -->
+  <!-- =================================================================== -->
+  <div id="editGoalModal" onclick="if(event.target === this) closeEditGoalModal()" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full overflow-hidden p-5 sm:p-6 shadow-2xl border border-sky-200">
+      <div class="flex items-center justify-between border-b border-sky-100 pb-3 mb-4">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">🎯</span>
+          <h3 class="text-base font-bold text-slate-900">Editar Meta da Família</h3>
+        </div>
+        <button onclick="closeEditGoalModal()" class="text-slate-400 hover:text-slate-700 font-bold text-lg px-2" title="Fechar">✕</button>
+      </div>
+      <input type="hidden" id="editGoalId" />
+      <div class="space-y-3.5 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Nome do Sonho / Objetivo</label>
+          <input id="editGoalName" type="text" class="w-full border border-sky-200 rounded-xl px-3 py-2 font-medium focus:outline-none focus:border-sky-400" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Valor Total Alvo (R$)</label>
+            <input id="editGoalTotal" type="number" inputmode="decimal" step="0.01" min="1" class="w-full border border-sky-200 rounded-xl px-3 py-2 font-medium focus:outline-none focus:border-sky-400" />
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Valor Já Guardado (R$)</label>
+            <input id="editGoalSaved" type="number" inputmode="decimal" step="0.01" min="0" class="w-full border border-sky-200 rounded-xl px-3 py-2 font-medium focus:outline-none focus:border-sky-400" />
+          </div>
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Prazo Restante (Meses)</label>
+          <input id="editGoalMonths" type="number" min="1" max="120" class="w-full border border-sky-200 rounded-xl px-3 py-2 font-medium focus:outline-none focus:border-sky-400" />
+        </div>
+      </div>
+      <div class="mt-5 pt-3 border-t border-sky-100 flex items-center justify-end gap-2.5">
+        <button type="button" onclick="closeEditGoalModal()" class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold text-xs transition">
+          Cancelar
+        </button>
+        <button type="button" onclick="saveEditGoal()" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm transition">
+          Salvar Alterações
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =================================================================== -->
+  <!-- MODAL 1: EDITAR LANÇAMENTO EXISTENTE                                -->
+  <!-- =================================================================== -->
+  <div id="editTxModal" onclick="if(event.target === this) closeEditTxModal()" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-3xl max-w-lg w-full max-h-[85vh] flex flex-col overflow-hidden p-5 sm:p-6 shadow-2xl border border-sky-200">
+      <div class="flex items-center justify-between shrink-0 border-b border-sky-100 pb-3 mb-3">
+        <h3 class="text-base sm:text-lg font-bold text-slate-900">Editar Lançamento</h3>
+        <button onclick="closeEditTxModal()" class="text-slate-400 hover:text-slate-700 font-bold text-lg px-2" title="Fechar">✕</button>
+      </div>
+      <input type="hidden" id="editTxId" />
+      <div class="space-y-3 text-xs overflow-y-auto custom-scroll flex-1 pr-1">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-600 mb-1">Titular / Quem fez</label>
+            <select id="editTxOwner" class="w-full border border-slate-300 rounded-xl px-3 py-2 font-bold">
+              <option value="Éveli">Éveli</option>
+              <option value="Vital">Vital</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-bold text-slate-600 mb-1">Escopo (Casal ou Individual)</label>
+            <select id="editTxScope" class="w-full border border-slate-300 rounded-xl px-3 py-2 font-bold">
+              <option value="shared">Compartilhada (Casal)</option>
+              <option value="individual">Individual</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-600 mb-1">Conta / Cartão</label>
+            <select id="editTxAccount" class="w-full border border-slate-300 rounded-xl px-3 py-2 font-bold">
+              <option value="card_eveli_5544">Cartão Éveli (MC Gold 5544)</option>
+              <option value="card_marido">Cartão Vital</option>
+              <option value="cc_itau_conjunta">Conta Conjunta Itaú</option>
+              <option value="poupanca_caixa">Poupança Caixa (Reserva)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-bold text-slate-600 mb-1">Natureza</label>
+            <select id="editTxKind" class="w-full border border-slate-300 rounded-xl px-3 py-2 font-bold">
+              <option value="expense">Despesa / Compra</option>
+              <option value="income">Receita</option>
+              <option value="invoice_payment">Pagamento de Fatura</option>
+              <option value="transfer">Transferência / Aporte</option>
+              <option value="reimbursement">Reembolso / Estorno</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-600 mb-1">Data (DD/MM/AAAA)</label>
+            <input id="editTxDate" type="text" class="w-full border border-slate-300 rounded-xl px-3 py-2" />
+          </div>
+          <div>
+            <label class="block font-bold text-slate-600 mb-1">Mês Competência/Fatura (AAAA-MM)</label>
+            <input id="editTxPeriod" type="text" class="w-full border border-slate-300 rounded-xl px-3 py-2" />
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block font-bold text-slate-600">Categoria</label>
+              <button type="button" onclick="promptAddNewCategory('editTxCategory')" class="text-[11px] text-sky-600 hover:text-sky-800 font-semibold underline">+ Nova</button>
+            </div>
+            <select id="editTxCategory" onchange="handleCategorySelectChange(this)" class="w-full border border-slate-300 rounded-xl px-3 py-2">
+              <option value="Lanches & Restaurantes">Lanches & Restaurantes</option>
+              <option value="Mercado & Hortifruti">Mercado & Hortifruti</option>
+              <option value="Uber & Transporte">Uber & Transporte</option>
+              <option value="Parcelamentos Cartão">Parcelamentos Cartão</option>
+              <option value="Saúde, Farmácia & Academia">Saúde, Farmácia & Academia</option>
+              <option value="Auto Escola & Detran">Auto Escola & Detran</option>
+              <option value="Casa, Serviços & Outros">Casa, Serviços & Outros</option>
+              <option value="Receita">Receita</option>
+              <option value="Faturas Antigas Pagas">Pagamento de Fatura</option>
+              <option value="Reserva p/ Meta">Reserva p/ Meta</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-bold text-slate-600 mb-1">Valor (R$)</label>
+            <input id="editTxAmount" type="number" inputmode="decimal" step="0.01" min="0.01" class="w-full border border-slate-300 rounded-xl px-3 py-2 font-bold" />
+          </div>
+        </div>
+        <div>
+          <label class="block font-bold text-slate-600 mb-1">Descrição</label>
+          <input id="editTxDesc" type="text" class="w-full border border-slate-300 rounded-xl px-3 py-2" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-600 mb-1">Parcela Atual (opcional)</label>
+            <input id="editTxInstCur" type="number" min="1" placeholder="Ex: 3" class="w-full border border-slate-300 rounded-xl px-3 py-2" />
+          </div>
+          <div>
+            <label class="block font-bold text-slate-600 mb-1">Total de Parcelas (opcional)</label>
+            <input id="editTxInstTot" type="number" min="1" placeholder="Ex: 12" class="w-full border border-slate-300 rounded-xl px-3 py-2" />
+          </div>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 shrink-0 border-t border-sky-100 pt-3 mt-3">
+        <button onclick="closeEditTxModal()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100">Cancelar</button>
+        <button onclick="saveEditedTransaction()" class="px-5 py-2 rounded-xl text-xs font-semibold bg-sky-600 hover:bg-sky-700 text-white">Salvar Alterações</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =================================================================== -->
+  <!-- MODAL 2: BACKUP, EXPORTAÇÃO EXCEL (.CSV) E MODO DEMONSTRAÇÃO        -->
+  <!-- =================================================================== -->
+  <div id="backupModal" onclick="if(event.target === this) closeBackupModal()" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-3xl max-w-xl w-full max-h-[85vh] flex flex-col overflow-hidden p-5 sm:p-6 shadow-xl border border-sky-200">
+      <div class="flex items-start justify-between gap-4 shrink-0 border-b border-sky-100 pb-3 mb-3">
+        <div>
+          <span class="text-[11px] font-semibold uppercase tracking-wider text-sky-700">
+            Segurança & Portabilidade
+          </span>
+          <h3 class="text-base sm:text-lg font-bold text-slate-900 mt-0.5">Backup, Planilha Excel e Restauração</h3>
+        </div>
+        <button onclick="closeBackupModal()" class="text-slate-400 hover:text-slate-700 font-bold text-lg px-2 shrink-0" title="Fechar">✕</button>
+      </div>
+
+      <div class="space-y-3 text-xs overflow-y-auto custom-scroll flex-1 pr-1">
+        <div class="p-3.5 rounded-2xl bg-sky-50/60 border border-sky-200/70 flex items-center justify-between gap-3">
+          <div>
+            <h4 class="font-bold text-sm text-slate-900">1. Baixar Backup Completo (.JSON)</h4>
+            <p class="text-slate-500 mt-0.5">Salva todas as contas, os 2 cartões, lançamentos, metas e orçamentos atuais.</p>
+          </div>
+          <button onclick="exportBackupJson()" class="bg-sky-600 hover:bg-sky-700 text-white font-semibold px-4 py-2 rounded-xl shrink-0">
+            Baixar .JSON
+          </button>
+        </div>
+
+        <div class="p-3.5 rounded-2xl bg-sky-50/60 border border-sky-200/70 flex items-center justify-between gap-3">
+          <div>
+            <h4 class="font-bold text-sm text-slate-900">2. Exportar Planilha para Excel (.CSV)</h4>
+            <p class="text-slate-500 mt-0.5">Gera uma tabela com todos os lançamentos para abrir no Excel ou Google Sheets.</p>
+          </div>
+          <button onclick="exportTransactionsCsv()" class="bg-white hover:bg-sky-50 text-sky-800 border border-sky-200 font-semibold px-4 py-2 rounded-xl shrink-0">
+            Baixar .CSV
+          </button>
+        </div>
+
+        <div class="p-3.5 rounded-2xl bg-sky-50/60 border border-sky-200/70">
+          <h4 class="font-bold text-sm text-slate-900 mb-1">3. Restaurar Backup (.JSON)</h4>
+          <p class="text-slate-500 mb-2">Selecione um arquivo `.json` salvo anteriormente para recuperar seus dados:</p>
+          <input type="file" accept=".json" onchange="importBackupJsonFile(event)" class="block w-full text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-sky-600 file:text-white hover:file:bg-sky-700 cursor-pointer" />
+        </div>
+
+        <div class="p-3.5 rounded-2xl bg-sky-50/60 border border-sky-200/70 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h4 class="font-bold text-sm text-slate-900">4. Limpar e Reiniciar Base</h4>
+            <p class="text-slate-500 mt-0.5">Zera os lançamentos para começar do zero com seus extratos reais a partir de Setembro/2026.</p>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="resetRealData()" class="bg-white border border-rose-300 text-rose-600 hover:bg-rose-50 font-bold px-3.5 py-1.5 rounded-xl shadow-xs">
+              🗑️ Zerar Lançamentos
+            </button>
+          </div>
+        </div>
+
+
+      </div>
+    </div>
+  </div>
+
+
+
+  <!-- =================================================================== -->
+  <!-- MODAL 4: CONFIGURAR CARTÃO DE CRÉDITO & CONCILIAÇÃO DE FATURA       -->
+  <!-- =================================================================== -->
+  <div id="cardSettingsModal" onclick="if(event.target === this) closeCardSettingsModal()" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full max-h-[85vh] flex flex-col overflow-hidden p-5 sm:p-6 shadow-xl border border-sky-200">
+      <div class="flex items-start justify-between gap-3 shrink-0 border-b border-sky-100 pb-3 mb-3">
+        <div>
+          <span id="cardModalHolderBadge" class="text-[11px] font-semibold uppercase tracking-wider text-sky-700">
+            Titular: Éveli
+          </span>
+          <h3 class="text-base sm:text-lg font-bold text-slate-900 mt-0.5">Configurar Cartão & Fatura</h3>
+        </div>
+        <button onclick="closeCardSettingsModal()" class="text-slate-400 hover:text-slate-700 font-bold text-lg px-2 shrink-0" title="Fechar">✕</button>
+      </div>
+
+      <input type="hidden" id="cardModalId" />
+      <div class="space-y-3 text-xs overflow-y-auto custom-scroll flex-1 pr-1">
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Nome / Identificação do Cartão</label>
+          <input id="cardModalNameInput" type="text" class="w-full border border-sky-200 rounded-xl px-3 py-2 bg-white font-semibold text-slate-800 focus:outline-none focus:border-sky-400" />
+        </div>
+
+        <div class="grid grid-cols-3 gap-2.5">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Limite Total (R$)</label>
+            <input id="cardModalLimitInput" type="number" step="10" min="0" class="w-full border border-sky-200 rounded-xl px-2.5 py-2 bg-white font-bold text-slate-800" />
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Dia Fechamento</label>
+            <input id="cardModalClosingInput" type="number" min="1" max="31" class="w-full border border-sky-200 rounded-xl px-2.5 py-2 bg-white text-center font-semibold text-slate-800" />
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Dia Vencimento</label>
+            <input id="cardModalDueInput" type="number" min="1" max="31" class="w-full border border-sky-200 rounded-xl px-2.5 py-2 bg-white text-center font-semibold text-slate-800" />
+          </div>
+        </div>
+
+        <div class="p-3.5 rounded-2xl bg-sky-50/70 border border-sky-200/70">
+          <label class="block font-semibold text-sky-900 mb-1">
+            Total Oficial na Fatura de <span id="cardModalPeriodLabel">Outubro/2026</span> (R$)
+          </label>
+          <p class="text-[11px] text-slate-500 mb-2">
+            Informe o valor impresso no PDF da fatura para o sistema conferir se a soma das compras bate 100% (deixe em branco se a fatura ainda estiver aberta):
+          </p>
+          <input id="cardModalOfficialInvoiceInput" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Ex: 3096.11" class="w-full border border-sky-200 rounded-xl px-3 py-2 bg-white font-bold text-sky-950" />
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 shrink-0 border-t border-sky-100 pt-3 mt-3">
+        <button onclick="closeCardSettingsModal()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100">Cancelar</button>
+        <button onclick="saveCardSettingsModal()" class="px-5 py-2 rounded-xl text-xs font-semibold bg-sky-600 hover:bg-sky-700 text-white shadow-sm">Salvar Cartão</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =================================================================== -->
+  <!-- MODAL 5: LOGIN DO CASAL, AUDITORIA E SINCRONIZAÇÃO NUVEM (SUPABASE) -->
+  <!-- =================================================================== -->
+  <div id="authCloudModal" onclick="if(event.target === this) closeAuthCloudModal()" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-3xl max-w-xl w-full max-h-[85vh] flex flex-col overflow-hidden p-5 sm:p-6 shadow-xl border border-sky-200">
+      <div class="flex items-start justify-between gap-4 shrink-0 border-b border-sky-100 pb-3 mb-3">
+        <div>
+          <span class="text-[11px] font-semibold uppercase tracking-wider text-sky-700">
+            Ambiente Compartilhado do Casal (Etapa 3 & 4)
+          </span>
+          <h3 class="text-base sm:text-lg font-bold text-slate-900 mt-0.5">Perfil Ativo, Nuvem (Supabase) & Auditoria</h3>
+        </div>
+        <button onclick="closeAuthCloudModal()" class="text-slate-400 hover:text-slate-700 font-bold text-lg px-2 shrink-0" title="Fechar">✕</button>
+      </div>
+
+      <div class="space-y-3.5 text-xs overflow-y-auto custom-scroll flex-1 pr-1">
+        <!-- 1. Seleção de Quem Está Usando o Dispositivo -->
+        <div class="p-3.5 rounded-2xl bg-sky-50/70 border border-sky-200/70">
+          <label class="block font-bold text-sky-950 text-xs mb-1">
+            1. Quem está usando este aparelho agora?
+          </label>
+          <p class="text-[11px] text-slate-500 mb-2">
+            Os dois enxergam todos os dados da família, mas novos cadastros e o histórico de alterações registrarão seu nome automaticamente:
+          </p>
+          <div class="flex gap-2">
+            <button id="modalProfileBtnEveli" onclick="setLoggedPerson('Éveli')" class="flex-1 py-2 px-3 rounded-xl font-bold text-xs bg-sky-600 text-white shadow-sm transition">
+              Conectado como Éveli
+            </button>
+            <button id="modalProfileBtnVital" onclick="setLoggedPerson('Vital')" class="flex-1 py-2 px-3 rounded-xl font-semibold text-xs bg-white text-slate-700 border border-sky-200 hover:bg-sky-50 transition">
+              Conectado como Vital
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. Conexão com Banco de Dados na Nuvem (Supabase) -->
+        <div class="p-3.5 rounded-2xl bg-white border border-sky-200/80 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <h4 class="font-bold text-slate-900 text-xs">2. Sincronização em Nuvem entre Dispositivos (Supabase)</h4>
+            <span class="text-[10px] font-semibold bg-sky-50 text-sky-700 border border-sky-200 px-2 py-0.5 rounded-md">sql/schema.sql pronto</span>
+          </div>
+          <p class="text-[11px] text-slate-500">
+            Para sincronizar entre celulares e computadores diferentes gratuitamente, cole a URL e a Anon Key do seu projeto no Supabase (ou deixe em branco para usar no Modo Local):
+          </p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div>
+              <label class="block text-[10px] font-semibold uppercase text-sky-800/80 mb-1">Supabase Project URL</label>
+              <input id="cloudSupabaseUrlInput" type="url" placeholder="https://seu-projeto.supabase.co" class="w-full border border-sky-200 rounded-xl px-2.5 py-1.5 bg-sky-50/30 text-slate-800" />
+            </div>
+            <div>
+              <label class="block text-[10px] font-semibold uppercase text-sky-800/80 mb-1">Código da Família (Compartilhado)</label>
+              <input id="cloudHouseholdCodeInput" type="text" value="casal_eveli_vital" class="w-full border border-sky-200 rounded-xl px-2.5 py-1.5 bg-sky-50/30 font-semibold text-slate-800" />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-[10px] font-semibold uppercase text-sky-800/80 mb-1">Supabase Anon Public Key</label>
+            <input id="cloudSupabaseKeyInput" type="password" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI..." class="w-full border border-sky-200 rounded-xl px-2.5 py-1.5 bg-sky-50/30 font-mono text-slate-800" />
+          </div>
+
+          <!-- Login Individual com E-mail e Senha (Supabase Auth) -->
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 pt-1">
+            <div class="sm:col-span-5">
+              <input id="cloudUserEmailInput" type="email" placeholder="Seu e-mail (opcional)" class="w-full border border-sky-200 rounded-xl px-2.5 py-1.5 bg-white text-slate-800" />
+            </div>
+            <div class="sm:col-span-4">
+              <input id="cloudUserPasswordInput" type="password" placeholder="Senha (mín. 6 dígitos)" class="w-full border border-sky-200 rounded-xl px-2.5 py-1.5 bg-white text-slate-800" />
+            </div>
+            <div class="sm:col-span-3 flex gap-1">
+              <button onclick="signInWithSupabaseAuth(false)" class="flex-1 bg-sky-100 hover:bg-sky-200 text-sky-900 font-semibold rounded-xl px-2 py-1.5 transition" title="Entrar com E-mail e Senha">
+                Entrar
+              </button>
+              <button onclick="signInWithSupabaseAuth(true)" class="flex-1 bg-white hover:bg-sky-50 text-sky-700 border border-sky-200 font-semibold rounded-xl px-2 py-1.5 transition" title="Criar Login no Supabase">
+                Criar
+              </button>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-sky-100">
+            <button onclick="saveCloudSettingsFromModal()" class="text-sky-700 hover:text-sky-900 font-semibold underline text-xs">
+              Salvar Configuração
+            </button>
+            <button onclick="signOutSupabase()" class="text-slate-500 hover:text-rose-600 font-semibold underline text-xs">
+              Sair da conta
+            </button>
+            <div class="flex gap-2">
+              <button onclick="pullStateFromSupabaseCloud(false)" class="bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-semibold px-3 py-1.5 rounded-xl transition">
+                ↓ Baixar da Nuvem
+              </button>
+              <button onclick="pushStateToSupabaseCloud(false)" class="bg-sky-600 hover:bg-sky-700 text-white font-semibold px-3.5 py-1.5 rounded-xl shadow-sm transition">
+                ↑ Enviar p/ Nuvem
+              </button>
+            </div>
+          </div>
+
+          <div id="cloudSyncFeedbackMsg" class="hidden"></div>
+        </div>
+
+        <!-- 3. Histórico de Alterações do Casal (Auditoria) -->
+        <div class="p-3.5 rounded-2xl bg-sky-50/40 border border-sky-200/70">
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="font-bold text-slate-900 text-xs">3. Histórico Recente de Alterações do Casal</h4>
+            <span class="text-[10px] text-slate-500">Quem cadastrou ou alterou</span>
+          </div>
+          <div id="auditLogsListContainer" class="max-h-32 overflow-y-auto custom-scroll pr-1"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =================================================================== -->
+  <!-- MODAL 6: EDUCADORA FINANCEIRA IA (CONSULTORIA & DÚVIDAS LEIGAS)      -->
+  <!-- =================================================================== -->
+  <div id="aiAdvisorModal" onclick="if(event.target === this) closeAiAdvisorModal()" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-3xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden p-5 sm:p-6 shadow-xl border border-sky-200">
+      <div class="flex items-start justify-between gap-4 shrink-0 border-b border-sky-100 pb-3 mb-3">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-2xl bg-gradient-to-tr from-sky-600 to-indigo-600 text-white flex items-center justify-center font-bold text-base shadow-sm">
+            ✨
+          </div>
+          <div>
+            <h3 class="text-base sm:text-lg font-bold text-slate-900 leading-tight">Educadora Financeira IA</h3>
+            <p class="text-xs text-slate-500">Tire dúvidas em linguagem simples e entenda suas contas sem complicação</p>
+          </div>
+        </div>
+        <button onclick="closeAiAdvisorModal()" class="text-slate-400 hover:text-slate-700 font-bold text-lg px-2 shrink-0" title="Fechar">✕</button>
+      </div>
+
+      <div class="space-y-4 text-xs overflow-y-auto custom-scroll flex-1 pr-1">
+        <!-- Diagnóstico Rápido do Mês Atual -->
+        <div class="p-4 rounded-2xl bg-sky-50/70 border border-sky-200/80">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-sky-800">Diagnóstico do Período Atual</span>
+            <span id="aiAdvisorPeriodBadge" class="text-[10px] font-semibold bg-white text-sky-800 px-2 py-0.5 rounded-md border border-sky-200">Out/26</span>
+          </div>
+          <div id="aiAdvisorQuickSummary" class="text-xs text-slate-700 leading-relaxed space-y-1"></div>
+        </div>
+
+        <!-- Perguntas e Respostas Frequentes de Economia Doméstica -->
+        <div>
+          <h4 class="font-bold text-slate-900 text-xs sm:text-sm mb-2 flex items-center gap-1.5">
+            <span>💡</span> Guia Prático de Finanças do Casal (Para Leigos)
+          </h4>
+          <div id="aiFaqContainer" class="space-y-2"></div>
+        </div>
+
+        <!-- Perguntar à IA -->
+        <div class="p-4 rounded-2xl bg-white border border-sky-200/80 space-y-2.5">
+          <h4 class="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+            <span>💬</span> Tem alguma dúvida sobre o que fazer com seu dinheiro?
+          </h4>
+          <p class="text-[11px] text-slate-500">
+            Digite sua dúvida abaixo (ex: <em>"devo pagar o cartão ou guardar para a meta?"</em>, <em>"como economizar no mercado?"</em>):
+          </p>
+          <div class="flex gap-2">
+            <input id="aiCustomQuestionInput" type="text" placeholder="Digite sua pergunta aqui..." class="flex-1 border border-sky-200 rounded-xl px-3 py-2 text-xs bg-sky-50/30 text-slate-800 focus:outline-none focus:border-sky-400" onkeydown="if(event.key==='Enter') askCustomAiFinancialAdvice()" />
+            <button onclick="askCustomAiFinancialAdvice()" class="bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-white font-semibold text-xs px-4 py-2 rounded-xl shadow-sm transition shrink-0">
+              Perguntar
+            </button>
+          </div>
+          <div id="aiCustomResponseBox" class="hidden p-3.5 rounded-xl bg-gradient-to-r from-sky-50 to-indigo-50/60 border border-sky-200 text-xs text-slate-800 leading-relaxed"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =================================================================== -->
+  <!-- MODAL 7: ATUALIZAR INVESTIMENTOS POR IMAGEM / PRINT DO APP          -->
+  <!-- =================================================================== -->
+  <div id="investmentImageModal" onclick="if(event.target === this) closeInvestmentImageModal()" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-3xl max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden p-5 sm:p-6 shadow-2xl border border-emerald-200">
+      <div class="flex items-center justify-between shrink-0 border-b border-emerald-100 pb-3 mb-3">
+        <div class="flex items-center gap-2.5">
+          <span class="text-2xl">📷</span>
+          <div>
+            <h3 class="text-base sm:text-lg font-bold text-slate-900">Atualizar por Imagem / Print do App</h3>
+            <p class="text-xs text-slate-500">Envie a captura de tela do app do Itaú ou Tesouro para registrar os valores</p>
+          </div>
+        </div>
+        <button onclick="closeInvestmentImageModal()" class="text-slate-400 hover:text-slate-700 font-bold text-lg px-2" title="Fechar">✕</button>
+      </div>
+
+      <div class="space-y-4 text-xs overflow-y-auto custom-scroll flex-1 pr-1">
+        <!-- Seleção de Arquivo de Imagem -->
+        <div class="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200/80 text-center">
+          <input type="file" id="investmentImageFileInput" accept="image/*" onchange="handleInvestmentImageSelect(event)" class="hidden" />
+          <button onclick="document.getElementById('investmentImageFileInput').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition inline-flex items-center gap-2 cursor-pointer">
+            <span>📁</span>
+            <span>Escolher Imagem / Print do Celular</span>
+          </button>
+          <p class="text-[11px] text-slate-500 mt-2">Suporta fotos e prints em formato JPG, PNG e WEBP</p>
+        </div>
+
+        <!-- Área de Prévia da Imagem -->
+        <div id="investmentImagePreviewBox" class="hidden text-center p-2 rounded-2xl border border-slate-200 bg-slate-50">
+          <span class="text-[10px] uppercase font-semibold text-slate-500 block mb-1">Prévia do Print Selecionado:</span>
+          <img id="investmentImagePreviewImg" class="max-h-56 mx-auto rounded-xl border border-slate-200 object-contain shadow-xs" alt="Prévia" />
+        </div>
+
+        <!-- Seleção de Período da Foto -->
+        <div>
+          <label class="block text-[11px] font-bold uppercase text-slate-700 mb-1">Mês de Competência do Print</label>
+          <select id="investmentImgPeriodSelect" onchange="applyInvestmentScreenshotPresets(this.value)" class="w-full border border-sky-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 bg-white">
+            <option value="2026-10" selected>Outubro/2026 (Print Atual)</option>
+            <option value="2026-09">Setembro/2026 (Print Anterior)</option>
+            <option value="2026-11">Novembro/2026</option>
+            <option value="2026-12">Dezembro/2026</option>
+          </select>
+        </div>
+
+        <!-- Campos de Confirmação Lidos do Print -->
+        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+          <span class="text-[11px] font-bold text-slate-900 block border-b border-slate-200 pb-1.5">
+            Valores Lidos na Imagem (Confirme ou ajuste):
+          </span>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[10px] font-semibold text-slate-600 mb-1">Tesouro Direto - Saldo Bruto (R$)</label>
+              <input id="imgTesouroBalanceInput" type="number" step="0.01" value="8260.70" class="w-full text-xs font-bold border border-slate-300 rounded-xl px-2.5 py-1.5 bg-white text-slate-900" />
+            </div>
+            <div>
+              <label class="block text-[10px] font-semibold text-slate-600 mb-1">Tesouro Direto - Rendimento (R$)</label>
+              <input id="imgTesouroEarningsInput" type="number" step="0.01" value="62.59" class="w-full text-xs font-bold border border-slate-300 rounded-xl px-2.5 py-1.5 bg-white text-emerald-700" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+            <div>
+              <label class="block text-[10px] font-semibold text-slate-600 mb-1">Poupança Itaú - Saldo Bruto (R$)</label>
+              <input id="imgPoupItauBalanceInput" type="number" step="0.01" value="13.45" class="w-full text-xs font-bold border border-slate-300 rounded-xl px-2.5 py-1.5 bg-white text-slate-900" />
+            </div>
+            <div>
+              <label class="block text-[10px] font-semibold text-slate-600 mb-1">Poupança Itaú - Rendimento (R$)</label>
+              <input id="imgPoupItauEarningsInput" type="number" step="0.01" value="0.09" class="w-full text-xs font-bold border border-slate-300 rounded-xl px-2.5 py-1.5 bg-white text-emerald-700" />
+            </div>
+          </div>
+
+          <div class="pt-2 border-t border-slate-200">
+            <label class="block text-[10px] font-semibold text-slate-600 mb-1">Data Informada no Print (Opcional)</label>
+            <input id="imgDateInput" type="text" value="22/10/2026" class="w-full text-xs border border-slate-300 rounded-xl px-2.5 py-1.5 bg-white text-slate-700" placeholder="Ex: 22/10/2026" />
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2.5 shrink-0 border-t border-slate-100 pt-3 mt-3">
+        <button onclick="closeInvestmentImageModal()" class="text-xs text-slate-600 hover:text-slate-800 font-medium px-4 py-2 rounded-xl transition">
+          Cancelar
+        </button>
+        <button onclick="saveInvestmentImageInfo()" class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl shadow-sm transition">
+          Salvar Informações da Imagem
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =================================================================== -->
+  <!-- MODAL 8: ATUALIZAR INVESTIMENTOS POR ESCRITO (DIGITAÇÃO DIRETA)     -->
+  <!-- =================================================================== -->
+  <div id="investmentEditModal" onclick="if(event.target === this) closeInvestmentEditModal()" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-sky-200">
+      <div class="flex items-center justify-between border-b border-sky-100 pb-3 mb-4">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">✏️</span>
+          <h3 class="text-base font-bold text-slate-900">Atualizar por Escrito</h3>
+        </div>
+        <button onclick="closeInvestmentEditModal()" class="text-slate-400 hover:text-slate-700 font-bold text-lg px-2" title="Fechar">✕</button>
+      </div>
+
+      <div class="space-y-3.5 text-xs">
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-700 mb-1">Conta ou Investimento</label>
+          <select id="editInvestmentAccountSelect" onchange="loadCurrentInvestmentValuesForEdit()" class="w-full border border-sky-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 bg-white">
+            <option value="tesouro_direto">Tesouro Direto (Tesouro Nacional / Itaú Corretora)</option>
+            <option value="poupanca_itau">Poupança Itaú</option>
+            <option value="poupanca_caixa">Poupança Caixa Econômica</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-700 mb-1">Mês de Referência</label>
+          <select id="editInvestmentPeriodSelect" onchange="loadCurrentInvestmentValuesForEdit()" class="w-full border border-sky-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 bg-white">
+            <option value="2026-10" selected>Outubro/2026 (Mês Atual)</option>
+            <option value="2026-09">Setembro/2026</option>
+            <option value="2026-11">Novembro/2026</option>
+            <option value="2026-12">Dezembro/2026</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-700 mb-1">Saldo Bruto Atual (R$)</label>
+          <input id="editInvestmentBalanceInput" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0,00" class="w-full text-sm font-bold border border-sky-300 rounded-xl px-3 py-2 bg-white text-slate-900" />
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-700 mb-1">Rendimento Bruto no Mês (R$)</label>
+          <input id="editInvestmentEarningsInput" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0,00" class="w-full text-sm font-bold border border-sky-300 rounded-xl px-3 py-2 bg-white text-emerald-700" />
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-700 mb-1">Data da Atualização (Opcional)</label>
+          <input id="editInvestmentDateInput" type="text" placeholder="Ex: 22/10/2026" class="w-full text-xs border border-sky-300 rounded-xl px-3 py-2 bg-white text-slate-700" />
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2.5 border-t border-slate-100 pt-3 mt-4">
+        <button onclick="closeInvestmentEditModal()" class="text-xs text-slate-600 hover:text-slate-800 font-medium px-4 py-2 rounded-xl transition">
+          Cancelar
+        </button>
+        <button onclick="saveInvestmentManualEdit()" class="text-xs bg-sky-600 hover:bg-sky-700 text-white font-bold px-4 py-2 rounded-xl shadow-sm transition">
+          Salvar Dados
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: VISUALIZADOR DA FOTO DA NOTA FISCAL EM TELA CHEIA -->
+  <div id="receiptViewerModal" onclick="if(event.target === this) closeReceiptViewerModal()" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-3xl max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden p-5 shadow-2xl border border-sky-200">
+      <div class="flex items-center justify-between gap-3 border-b border-sky-100 pb-3 mb-3">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">📷</span>
+          <h3 id="receiptViewerTitle" class="font-bold text-sm sm:text-base text-slate-900">Nota Fiscal</h3>
+        </div>
+        <button onclick="closeReceiptViewerModal()" class="text-slate-400 hover:text-slate-700 font-bold text-lg px-2" title="Fechar">✕</button>
+      </div>
+      <div class="flex-1 overflow-auto custom-scroll flex items-center justify-center bg-slate-50 p-2 rounded-2xl">
+        <img id="receiptViewerImg" src="" alt="Comprovante / Nota Fiscal" class="max-w-full max-h-[65vh] object-contain rounded-xl shadow-md border" />
+      </div>
+      <div class="mt-3 pt-2 text-right">
+        <button onclick="closeReceiptViewerModal()" class="text-xs bg-sky-600 hover:bg-sky-700 text-white font-semibold px-4 py-2 rounded-xl transition">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CENTRAL DE CONCILIAÇÃO MENSAL (CONTROLE PESSOAL VS. BANCO & CARTÕES) -->
+  <div id="reconciliationCenterModal" onclick="if(event.target === this) closeReconciliationModal()" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
+    <div class="bg-white rounded-3xl max-w-5xl w-full max-h-[92vh] flex flex-col overflow-hidden p-5 sm:p-6 shadow-2xl border border-sky-200">
+      
+      <!-- Cabeçalho da Modal -->
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-sky-100 pb-3 mb-4 shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-sm shrink-0">
+            ⚖️
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="font-bold text-base sm:text-lg text-slate-900">Central de Conciliação Mensal</h3>
+              <span id="reconModalMonthBadge" class="text-xs font-bold bg-indigo-50 text-indigo-800 border border-indigo-200 px-2.5 py-0.5 rounded-full"></span>
+            </div>
+            <p class="text-xs text-slate-500">Cruze o Controle Pessoal com a Conta Bancária (sem o total da fatura) e as compras do Cartão</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <select id="reconModalPeriodSelect" onchange="renderReconciliationModalContent(this.value)" class="text-xs font-bold border border-sky-300 rounded-xl px-3 py-1.5 bg-white text-slate-800">
+            <option value="2026-09">Setembro/2026</option>
+            <option value="2026-10" selected>Outubro/2026</option>
+            <option value="2026-11">Novembro/2026</option>
+            <option value="2026-12">Dezembro/2026</option>
+          </select>
+          <button onclick="closeReconciliationModal()" class="text-slate-400 hover:text-slate-700 font-bold text-lg px-2" title="Fechar">✕</button>
+        </div>
+      </div>
+
+      <!-- Conteúdo Dinâmico da Conciliação -->
+      <div id="reconciliationModalBody" class="flex-1 overflow-y-auto custom-scroll pr-1 space-y-4"></div>
+
+    </div>
+  </div>
+
+  <!-- MODAL: CENTRAL DE GERENCIAMENTO DE ARQUIVOS, FATURAS E FOTOS (EXCLUSÃO EM CASCATA) -->
+  <div id="filesManagerModal" onclick="if(event.target === this) closeFilesManagerModal()" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
+    <div class="bg-white rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-sky-200 overflow-hidden p-4 sm:p-6 space-y-4">
+      
+      <!-- Cabeçalho da Modal -->
+      <div class="flex items-center justify-between border-b border-sky-100 pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-10 h-10 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center text-xl shrink-0">
+            📁
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="font-bold text-base sm:text-lg text-slate-900">Central de Arquivos, Faturas & Fotos</h3>
+            </div>
+            <p class="text-xs text-slate-500">Histórico de extratos OFX, faturas PDF e fotos de notas fiscais com exclusão em cascata</p>
+          </div>
+        </div>
+
+        <button onclick="closeFilesManagerModal()" class="text-slate-400 hover:text-slate-700 font-bold text-lg px-2 cursor-pointer" title="Fechar">✕</button>
+      </div>
+
+      <!-- Conteúdo Dinâmico do Gerenciador de Arquivos -->
+      <div id="filesManagerModalBody" class="flex-1 overflow-y-auto custom-scroll pr-1 space-y-4"></div>
+
+    </div>
+  </div>
+
+  <!-- =================================================================== -->
+  <!-- MODAL: ALTERAR SENHA DE ACESSO DA FAMÍLIA                           -->
+  <!-- =================================================================== -->
+  <div id="changePasswordModal" onclick="if(event.target === this) closeChangePasswordModal()" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full overflow-hidden p-5 sm:p-6 shadow-2xl border border-sky-200">
+      <div class="flex items-center justify-between border-b border-sky-100 pb-3 mb-4">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">🔐</span>
+          <h3 class="text-base font-bold text-slate-900">Alterar Senha Familiar</h3>
+        </div>
+        <button onclick="closeChangePasswordModal()" class="text-slate-400 hover:text-slate-700 font-bold text-lg px-2" title="Fechar">✕</button>
+      </div>
+
+      <form onsubmit="submitChangePassword(event)" class="space-y-3.5 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Senha Atual (Padrão inicial: 123456)</label>
+          <input type="password" id="changeCurrentPasswordInput" placeholder="Digite a senha atual..." required class="w-full border border-sky-200 rounded-xl px-3 py-2.5 font-medium focus:outline-none focus:border-sky-400" />
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Nova Senha (Mínimo 4 caracteres)</label>
+          <input type="password" id="changeNewPasswordInput" placeholder="Digite a nova senha..." required class="w-full border border-sky-200 rounded-xl px-3 py-2.5 font-medium focus:outline-none focus:border-sky-400" />
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Confirme a Nova Senha</label>
+          <input type="password" id="changeConfirmPasswordInput" placeholder="Repita a nova senha..." required class="w-full border border-sky-200 rounded-xl px-3 py-2.5 font-medium focus:outline-none focus:border-sky-400" />
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Dica de Senha (Opcional)</label>
+          <input type="text" id="changeHintInput" placeholder="Ex: Data especial do casal..." class="w-full border border-sky-200 rounded-xl px-3 py-2.5 font-medium focus:outline-none focus:border-sky-400" />
+        </div>
+
+        <div class="mt-5 pt-3 border-t border-sky-100 flex items-center justify-end gap-2.5">
+          <button type="button" onclick="closeChangePasswordModal()" class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold text-xs transition">
+            Cancelar
+          </button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow-sm transition">
+            Salvar Nova Senha
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- =================================================================== -->
+  <!-- BARRA DE NAVEGAÇÃO INFERIOR FIXA PARA SMARTPHONES (BOTTOM NAV)      -->
+  <!-- =================================================================== -->
+  <nav id="mobileBottomNav" class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-sky-200/80 safe-area-pb shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
+    <div class="grid grid-cols-5 items-center max-w-lg mx-auto px-1 py-1">
+      <!-- 1. Visão Geral -->
+      <button onclick="setActiveTab('overview')" id="btnBottomTab_overview" class="flex flex-col items-center justify-center py-1.5 px-1 text-sky-600 font-bold transition text-[11px] active:scale-95" title="Visão Geral">
+        <span class="text-xl">📊</span>
+        <span class="tracking-tight leading-none mt-0.5">Visão</span>
+      </button>
+
+      <!-- 2. Conta Bancária -->
+      <button onclick="setActiveTab('banking')" id="btnBottomTab_banking" class="flex flex-col items-center justify-center py-1.5 px-1 text-slate-500 hover:text-slate-700 font-medium transition text-[11px] active:scale-95" title="Conta Itaú">
+        <span class="text-xl">🏦</span>
+        <span class="tracking-tight leading-none mt-0.5">Conta</span>
+      </button>
+
+      <!-- 3. Botão Central de Lançamento Rápido (1-Tap no Celular) -->
+      <div class="flex items-center justify-center">
+        <button onclick="quickOpenDailyExpense()" class="w-12 h-12 -mt-5 rounded-full bg-gradient-to-tr from-sky-600 to-indigo-600 text-white flex flex-col items-center justify-center shadow-lg shadow-sky-600/30 active:scale-90 transition transform cursor-pointer border-2 border-white" title="Lançar Gasto Diário Rapidamente">
+          <span class="text-xl leading-none font-bold">+</span>
+          <span class="text-[9px] font-bold leading-none uppercase tracking-tighter">Lançar</span>
+        </button>
+      </div>
+
+      <!-- 4. Cartões de Crédito -->
+      <button onclick="setActiveTab('cards')" id="btnBottomTab_cards" class="flex flex-col items-center justify-center py-1.5 px-1 text-slate-500 hover:text-slate-700 font-medium transition text-[11px] active:scale-95" title="Cartões">
+        <span class="text-xl">💳</span>
+        <span class="tracking-tight leading-none mt-0.5">Cartões</span>
+      </button>
+
+      <!-- 5. Metas da Família -->
+      <button onclick="setActiveTab('goals')" id="btnBottomTab_goals" class="flex flex-col items-center justify-center py-1.5 px-1 text-slate-500 hover:text-slate-700 font-medium transition text-[11px] active:scale-95" title="Metas">
+        <span class="text-xl">🎯</span>
+        <span class="tracking-tight leading-none mt-0.5">Metas</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- =================================================================== -->
+  <!-- MODAL / GAVETA ACTION SHEET: MAIS OPÇÕES & FERRAMENTAS MOBILE       -->
+  <!-- =================================================================== -->
+  <div id="mobileMoreMenuModal" onclick="if(event.target === this) closeMobileMoreMenu()" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md p-5 pb-8 sm:pb-6 shadow-2xl border border-sky-200 space-y-4 animate-in slide-in-from-bottom duration-200">
+      
+      <!-- Cabeçalho do Menu Mobile -->
+      <div class="flex items-center justify-between border-b border-sky-100 pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold text-base">
+            ☰
+          </div>
+          <div>
+            <h3 class="font-bold text-base text-slate-900 leading-tight">Mais Opções & Ferramentas</h3>
+            <p class="text-[11px] text-slate-500">Acesse recursos avançados da família</p>
+          </div>
+        </div>
+        <button onclick="closeMobileMoreMenu()" class="text-slate-400 hover:text-slate-700 font-bold text-lg px-2 cursor-pointer" title="Fechar">✕</button>
+      </div>
+
+      <!-- Lista de Atalhos -->
+      <div class="grid grid-cols-2 gap-2.5 text-xs font-semibold">
+        <button onclick="setActiveTab('daily'); closeMobileMoreMenu();" class="flex items-center gap-2.5 p-3 rounded-2xl bg-sky-50/70 hover:bg-sky-100 text-sky-900 border border-sky-200/80 active:scale-95 transition text-left cursor-pointer">
+          <span class="text-lg">📝</span>
+          <div>
+            <div class="font-bold">Controle Diário</div>
+            <div class="text-[10px] text-slate-500 font-normal">Lançamentos do dia</div>
+          </div>
+        </button>
+
+        <button onclick="setActiveTab('investments'); closeMobileMoreMenu();" class="flex items-center gap-2.5 p-3 rounded-2xl bg-emerald-50/70 hover:bg-emerald-100 text-emerald-950 border border-emerald-200/80 active:scale-95 transition text-left cursor-pointer">
+          <span class="text-lg">💰</span>
+          <div>
+            <div class="font-bold">Poupanças</div>
+            <div class="text-[10px] text-slate-500 font-normal">Investimentos & Caixa</div>
+          </div>
+        </button>
+
+        <button onclick="closeMobileMoreMenu(); openFilesManagerModal();" class="flex items-center gap-2.5 p-3 rounded-2xl bg-sky-50/70 hover:bg-sky-100 text-sky-900 border border-sky-200/80 active:scale-95 transition text-left cursor-pointer">
+          <span class="text-lg">📁</span>
+          <div>
+            <div class="font-bold">Arquivos & Fotos</div>
+            <div class="text-[10px] text-slate-500 font-normal">Extratos, faturas e notas</div>
+          </div>
+        </button>
+
+        <button onclick="closeMobileMoreMenu(); openReconciliationModal();" class="flex items-center gap-2.5 p-3 rounded-2xl bg-indigo-50/70 hover:bg-indigo-100 text-indigo-950 border border-indigo-200/80 active:scale-95 transition text-left cursor-pointer">
+          <span class="text-lg">⚖️</span>
+          <div>
+            <div class="font-bold">Conciliar Mês</div>
+            <div class="text-[10px] text-slate-500 font-normal">Bater gastos e extratos</div>
+          </div>
+        </button>
+
+        <button onclick="closeMobileMoreMenu(); openAiAdvisorModal();" class="flex items-center gap-2.5 p-3 rounded-2xl bg-gradient-to-r from-sky-50 to-indigo-50 hover:bg-sky-100 text-indigo-900 border border-sky-200/80 active:scale-95 transition text-left cursor-pointer">
+          <span class="text-lg">✨</span>
+          <div>
+            <div class="font-bold">Educadora IA</div>
+            <div class="text-[10px] text-slate-500 font-normal">Consultoria inteligente</div>
+          </div>
+        </button>
+
+        <button onclick="closeMobileMoreMenu(); openBackupModal();" class="flex items-center gap-2.5 p-3 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200 active:scale-95 transition text-left cursor-pointer">
+          <span class="text-lg">💾</span>
+          <div>
+            <div class="font-bold">Backup & Dados</div>
+            <div class="text-[10px] text-slate-500 font-normal">Exportar JSON e CSV</div>
+          </div>
+        </button>
+
+        <button onclick="closeMobileMoreMenu(); openChangePasswordModal();" class="flex items-center gap-2.5 p-3 rounded-2xl bg-amber-50/70 hover:bg-amber-100 text-amber-950 border border-amber-200 active:scale-95 transition text-left cursor-pointer">
+          <span class="text-lg">🔐</span>
+          <div>
+            <div class="font-bold">Mudar Senha</div>
+            <div class="text-[10px] text-slate-500 font-normal">Segurança familiar</div>
+          </div>
+        </button>
+
+        <button onclick="closeMobileMoreMenu(); lockAppScreen();" class="flex items-center gap-2.5 p-3 rounded-2xl bg-rose-50/70 hover:bg-rose-100 text-rose-950 border border-rose-200 active:scale-95 transition text-left cursor-pointer">
+          <span class="text-lg">🔒</span>
+          <div>
+            <div class="font-bold">Bloquear Tela</div>
+            <div class="text-[10px] text-slate-500 font-normal">Exigir senha de acesso</div>
+          </div>
+        </button>
+      </div>
+
+      <div class="pt-2">
+        <button type="button" onclick="closeMobileMoreMenu()" class="w-full py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer">
+          Fechar Menu
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- =================================================================== -->
+  <!-- MÓDULOS JAVASCRIPT SEPARADOS POR RESPONSABILIDADE (ETAPAS 2, 3 E 4) -->
+  <!-- =================================================================== -->
+  <script src="js/utils.js"></script>
+  <script src="js/data-seed.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/finance-engine.js"></script>
+  <script src="js/financial-ai.js"></script>
+  <script src="js/importer-backup.js"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/supabase-sync.js"></script>
+  <script src="js/actions.js"></script>
+  <script src="js/auth-guard.js"></script>
+  <script src="js/ui-render.js"></script>
+</body>
+</html>
