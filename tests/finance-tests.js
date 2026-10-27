@@ -613,4 +613,28 @@ runTest('23. Segurança e Criptografia da Tela de Login: SHA-256 + Salt e Isolam
   assert.notStrictEqual(hash1, hash4, 'Salts diferentes devem produzir hashes diferentes (anti-rainbow table)');
 });
 
+runTest('24. Gerador de Senha Forte e Medidor de Força Criptográfica', () => {
+  assert.ok(typeof ctx.generateStrongPassword === 'function', 'generateStrongPassword deve ser função');
+  assert.ok(typeof ctx.evaluatePasswordStrength === 'function', 'evaluatePasswordStrength deve ser função');
+
+  const pwd1 = ctx.generateStrongPassword(16);
+  const pwd2 = ctx.generateStrongPassword(16);
+
+  assert.strictEqual(pwd1.length, 16, 'Senha deve ter comprimento de 16 caracteres');
+  assert.notStrictEqual(pwd1, pwd2, 'Senhas geradas devem ser aleatórias e distintas');
+  assert.ok(/[a-z]/.test(pwd1), 'Deve conter letras minúsculas');
+  assert.ok(/[A-Z]/.test(pwd1), 'Deve conter letras maiúsculas');
+  assert.ok(/[0-9]/.test(pwd1), 'Deve conter números');
+  assert.ok(/[^a-zA-Z0-9]/.test(pwd1), 'Deve conter caracteres especiais');
+
+  const strengthWeak = ctx.evaluatePasswordStrength('123');
+  assert.strictEqual(strengthWeak.label, 'Fraca');
+  assert.ok(strengthWeak.score < 40);
+
+  const strengthStrong = ctx.evaluatePasswordStrength(pwd1);
+  assert.ok(strengthStrong.score >= 85, 'Senha gerada deve atingir nível Excelente');
+  assert.strictEqual(strengthStrong.label, 'Excelente');
+  assert.strictEqual(strengthStrong.bars, 4);
+});
+
 console.log(`\n🎉 Resultado Final: ${passed} testes aprovados com sucesso!`);

@@ -3,10 +3,12 @@
 // ============================================================================
 // Responsável por:
 // 1. Tela de Login moderna, completa e segura (Éveli & Vital).
-// 2. Criptografia de senhas usando Web Crypto API (SHA-256 + Salt).
-// 3. Proteção contra ataques de força bruta (Rate limiting / lockout temporário).
-// 4. Sessão segura com opção "Lembrar de mim" e bloqueio automático por inatividade.
-// 5. Integração com o perfil ativo do casal e Supabase Auth.
+// 2. Autenticação por E-mail e Senha via Supabase Auth + Fallback Local.
+// 3. Login com 1 clique pelo Google (Google OAuth).
+// 4. Gerador e sugestão de senha forte com medidor de força (Password Strength).
+// 5. Criptografia de senhas usando Web Crypto API (SHA-256 + Salt).
+// 6. Proteção contra ataques de força bruta (Rate limiting / lockout temporário).
+// 7. Sessão segura com opção "Lembrar de mim" e bloqueio automático por inatividade.
 
 const AUTH_CONFIG_KEY = 'financas_auth_config_v2';
 const AUTH_SESSION_KEY = 'financas_auth_session_v2';
@@ -17,11 +19,256 @@ const LOCKOUT_SECONDS = 30;
 let authState = {
   isUnlocked: false,
   selectedPerson: 'Éveli',
+  authMode: 'signin', // 'signin' | 'signup' | 'recovery' | 'pin'
   rememberMe: true,
   failedAttempts: 0,
   lockoutTimerInterval: null,
   inactivityTimer: null
 };
+
+// ----------------------------------------------------------------------------
+// GERADOR DE SENHA FORTE & MEDIDOR DE FORÇA
+// ----------------------------------------------------------------------------
+function generateStrongPassword(length = 16) {
+  // Caracteres legíveis sem símbolos ambíguos (evita l, I, 0, O)
+  const lower = 'abcdefghjkmnpqrstuvwxyz';
+  const upper = 'ABCDEFGHJKMNPQRSTUVWXYZ';
+  const numbers = '23456789';
+  const symbols = '!@#$%*&_+-=';
+  const all = lower + upper + numbers + symbols;
+
+  const getRandomChar = str => {
+    const arr = new Uint32Array(1);
+    crypto.getRandomValues(arr);
+    return str[arr[0] % str.length];
+  };
+
+  // Garante pelo menos 2 de cada categoria
+  const pwd = [
+    getRandomChar(lower), getRandomChar(lower),
+    getRandomChar(upper), getRandomChar(upper),
+    getRandomChar(numbers), getRandomChar(numbers),
+    getRandomChar(symbols), getRandomChar(symbols)
+  ];
+
+  while (pwd.length < Math.max(length, 12)) {
+    pwd.push(getRandomChar(all));
+  }
+
+  // Embaralhamento criptográfico Fisher-Yates
+  for (let i = pwd.length - 1; i > 0; i--) {
+    const arr = new Uint32Array(1);
+    crypto.getRandomValues(arr);
+    const j = arr[0] % (i + 1);
+    [pwd[i], pwd[j]] = [pwd[j], pwd[i]];
+  }
+
+  return pwd.join('');
+}
+
+function evaluatePasswordStrength(password) {
+  if (!password) {
+    return {
+      score: 0,
+      percent: 0,
+      label: 'Vazia',
+      color: 'slate',
+      badgeClass: 'text-slate-400 bg-slate-800 border-slate-700',
+      barColor: 'bg-slate-700',
+      bars: 0,
+      feedback: 'Digite uma senha para analisar a força.'
+    };
+  }
+
+  let score = 0;
+  const len = password.length;
+
+  if (len >= 8) score += 20;
+  if (len >= 12) score += 15;
+  if (len >= 16) score += 10;
+  if (/[a-z]/.test(password)) score += 15;
+  if (/[A-Z]/.test(password)) score += 15;
+  if (/[0-9]/.test(password)) score += 15;
+  if (/[^a-zA-Z0-9]/.test(password)) score += 15;
+
+  let label = 'Fraca';
+  let badgeClass = 'text-rose-400 bg-rose-950/40 border-rose-800/40';
+  let barColor = 'bg-rose-500';
+  let bars = 1;
+
+  if (score >= 85) {
+    label = 'Excelente';
+    badgeClass = 'text-emerald-300 bg-emerald-950/40 border-emerald-700/50';
+    barColor = 'bg-emerald-400';
+    bars = 4;
+  } else if (score >= 65) {
+    label = 'Forte';
+    badgeClass = 'text-sky-300 bg-sky-950/40 border-sky-700/50';
+    barColor = 'bg-sky-400';
+    bars = 3;
+  } else if (score >= 40) {
+    label = 'Média';
+    badgeClass = 'text-amber-300 bg-amber-950/40 border-amber-700/50';
+    barColor = 'bg-amber-400';
+    bars = 2;
+  }
+
+  return {
+    score,
+    percent: Math.min(score, 100),
+    label,
+    badgeClass,
+    barColor,
+    bars,
+    feedback: score >= 65 ? 'Senha forte e recomendada!' : 'Dica: use letras maiúsculas, minúsculas, números e símbolos.'
+  };
+}
+
+function updatePasswordStrengthUI(password) {
+  if (typeof document === 'undefined') return;
+  const container = document.getElementById('passwordStrengthContainer');
+  if (!container) return;
+
+  const res = evaluatePasswordStrength(password);
+  const badge = document.getElementById('passwordStrengthBadge');
+  const feed = document.getElementById('passwordStrengthFeedback');
+  const bars = [
+    document.getElementById('pwdBar1'),
+    document.getElementById('pwdBar2'),
+    document.getElementById('pwdBar3'),
+    document.getElementById('pwdBar4')
+  ];
+
+  if (badge) {
+    badge.textContent = res.label;
+    badge.className = `text-[10px] px-2 py-0.5 rounded-full border font-bold ${res.badgeClass}`;
+  }
+  if (feed) {
+    feed.textContent = res.feedback;
+  }
+
+  bars.forEach((bar, idx) => {
+    if (!bar) return;
+    if (idx < res.bars) {
+      bar.className = `h-1 flex-1 rounded-full transition-all duration-300 ${res.barColor}`;
+    } else {
+      bar.className = 'h-1 flex-1 rounded-full bg-slate-800 transition-all duration-300';
+    }
+  });
+}
+
+function suggestStrongPassword(targetInputId = 'loginPasswordInput') {
+  const pwd = generateStrongPassword(16);
+  const input = document.getElementById(targetInputId);
+  if (input) {
+    input.value = pwd;
+    input.type = 'text'; // exibe temporariamente para visualização
+    const icon = document.getElementById('loginEyeIcon');
+    if (icon) icon.textContent = '🙈';
+    updatePasswordStrengthUI(pwd);
+  }
+
+  if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(pwd).catch(() => {});
+  }
+
+  showLoginFeedback('✨ Senha forte gerada e copiada para sua área de transferência!', 'success');
+}
+
+// ----------------------------------------------------------------------------
+// CONTROLE DE MODOS DE LOGIN (ENTRAR / CRIAR CONTA / RECUPERAR / PIN)
+// ----------------------------------------------------------------------------
+function setAuthMode(mode) {
+  authState.authMode = mode;
+  if (typeof document === 'undefined') return;
+
+  const emailField = document.getElementById('loginEmailField');
+  const passwordField = document.getElementById('loginPasswordField');
+  const rememberField = document.getElementById('loginRememberField');
+  const googleBtnBox = document.getElementById('loginGoogleBtnBox');
+  const submitBtn = document.getElementById('loginSubmitBtn');
+  const submitBtnText = document.getElementById('loginSubmitBtnText');
+  const modeTabs = document.getElementById('loginModeTabs');
+
+  const tabSignIn = document.getElementById('authTabBtnSignIn');
+  const tabSignUp = document.getElementById('authTabBtnSignUp');
+  const tabPin = document.getElementById('authTabBtnPin');
+
+  const updateTabClass = (btn, active) => {
+    if (!btn) return;
+    btn.className = active
+      ? 'flex-1 py-1.5 px-2 rounded-xl text-xs font-bold bg-sky-600 text-white shadow-sm transition'
+      : 'flex-1 py-1.5 px-2 rounded-xl text-xs font-medium text-slate-400 hover:text-slate-200 transition';
+  };
+
+  updateTabClass(tabSignIn, mode === 'signin');
+  updateTabClass(tabSignUp, mode === 'signup');
+  updateTabClass(tabPin, mode === 'pin');
+
+  if (emailField) emailField.classList.remove('hidden');
+  if (passwordField) passwordField.classList.remove('hidden');
+  if (rememberField) rememberField.classList.remove('hidden');
+  if (googleBtnBox) googleBtnBox.classList.remove('hidden');
+
+  if (mode === 'recovery') {
+    if (passwordField) passwordField.classList.add('hidden');
+    if (rememberField) rememberField.classList.add('hidden');
+    if (googleBtnBox) googleBtnBox.classList.add('hidden');
+    if (submitBtnText) submitBtnText.textContent = 'Enviar Link de Recuperação 📧';
+  } else if (mode === 'signup') {
+    if (submitBtnText) submitBtnText.textContent = 'Criar Minha Conta ✨';
+  } else if (mode === 'pin') {
+    if (emailField) emailField.classList.add('hidden');
+    if (googleBtnBox) googleBtnBox.classList.add('hidden');
+    if (submitBtnText) submitBtnText.textContent = 'Desbloquear com PIN 🔓';
+  } else {
+    // signin
+    if (submitBtnText) submitBtnText.textContent = 'Entrar no Sistema 🚀';
+  }
+
+  const feedback = document.getElementById('loginFeedbackMsg');
+  if (feedback) feedback.classList.add('hidden');
+}
+
+// ----------------------------------------------------------------------------
+// LOGIN COM O GOOGLE (SUPABASE OAUTH COM 1 CLIQUE)
+// ----------------------------------------------------------------------------
+async function loginWithGoogleOAuth() {
+  const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+  if (!client) {
+    showLoginFeedback('Conectando ao Supabase... Verifique as configurações de nuvem.', 'warning');
+    return;
+  }
+
+  showLoginFeedback('Conectando ao Google com segurança...', 'info');
+
+  try {
+    const redirectTo = (typeof window !== 'undefined' && window.location)
+      ? window.location.origin + window.location.pathname
+      : undefined;
+
+    const { data, error } = await client.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'select_account'
+        }
+      }
+    });
+
+    if (error) throw error;
+  } catch (err) {
+    console.error('Google OAuth error:', err);
+    const msg = err.message || String(err);
+    if (msg.includes('provider is not enabled') || msg.includes('Google provider is not enabled')) {
+      showLoginFeedback('Dica: ative o provedor Google no painel do Supabase (Authentication > Providers > Google).', 'warning');
+    } else {
+      showLoginFeedback('Erro ao conectar com Google: ' + msg, 'danger');
+    }
+  }
+}
 
 // ----------------------------------------------------------------------------
 // CRIPTOGRAFIA & HASH SEGURO (SHA-256)
@@ -51,13 +298,11 @@ function saveStoredAuthConfig(cfg) {
 
 function getStoredSession() {
   try {
-    // 1. Tenta sessionStorage primeiro (sessão temporária)
     const sessionRaw = sessionStorage.getItem(AUTH_SESSION_KEY);
     if (sessionRaw) {
       const s = JSON.parse(sessionRaw);
       if (s.expiresAt && Date.now() < s.expiresAt) return s;
     }
-    // 2. Tenta localStorage se o usuário marcou "Lembrar de mim"
     const localRaw = localStorage.getItem(AUTH_SESSION_KEY);
     if (localRaw) {
       const s = JSON.parse(localRaw);
@@ -92,12 +337,11 @@ function clearSession() {
 }
 
 // ----------------------------------------------------------------------------
-// INICIALIZAÇÃO DA PROTEÇÃO DA TELA
+// INICIALIZAÇÃO DA PROTEÇÃO DA TELA E OAUTH LISTENER
 // ----------------------------------------------------------------------------
 async function initAuthGuard() {
   let cfg = getStoredAuthConfig();
 
-  // Se for o primeiro acesso absoluto, inicializa com senha padrão segura ("123456" ou casal2026)
   if (!cfg || !cfg.passwordHash) {
     const defaultHash = await generateSha256Hash('123456', DEFAULT_SALT);
     cfg = {
@@ -112,6 +356,15 @@ async function initAuthGuard() {
     saveStoredAuthConfig(cfg);
   }
 
+  // Preenche o último e-mail lembrado se existir
+  const emailInput = document.getElementById('loginEmailInput');
+  if (emailInput && typeof cloudConfig !== 'undefined' && cloudConfig.loggedEmail) {
+    emailInput.value = cloudConfig.loggedEmail;
+  }
+
+  // Configura o ouvinte oficial do Supabase Auth para Google e Magic Link
+  setupSupabaseAuthListener();
+
   // Verifica se já existe sessão válida ativa
   const activeSession = getStoredSession();
   if (activeSession && activeSession.person) {
@@ -121,6 +374,36 @@ async function initAuthGuard() {
 
   // Se não há sessão válida, bloqueia a tela e exibe login
   lockAppScreen();
+}
+
+function setupSupabaseAuthListener() {
+  const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+  if (!client || !client.auth || !client.auth.onAuthStateChange) return;
+
+  client.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_IN' && session && session.user) {
+      const email = session.user.email || '';
+      const metaPerson = session.user.user_metadata?.person;
+      let person = metaPerson || authState.selectedPerson;
+      if (!metaPerson && email.toLowerCase().includes('vital')) person = 'Vital';
+      if (!metaPerson && email.toLowerCase().includes('eveli')) person = 'Éveli';
+
+      if (typeof cloudConfig !== 'undefined') {
+        cloudConfig.loggedEmail = email;
+        cloudConfig.loggedPerson = person;
+        if (typeof saveCloudConfig === 'function') saveCloudConfig();
+      }
+
+      saveSession(person, true);
+      unlockApp(person, true);
+
+      if (typeof pullStateFromSupabaseCloud === 'function') {
+        pullStateFromSupabaseCloud(true);
+      }
+    } else if (event === 'SIGNED_OUT') {
+      lockAppScreen();
+    }
+  });
 }
 
 // ----------------------------------------------------------------------------
@@ -136,7 +419,6 @@ function lockAppScreen() {
     overlay.style.display = 'flex';
   }
 
-  // Limpa campos de senha para evitar cache no DOM
   const pwdInput = document.getElementById('loginPasswordInput');
   if (pwdInput) {
     pwdInput.value = '';
@@ -154,7 +436,6 @@ function unlockApp(person, recordAudit = true) {
   authState.isUnlocked = true;
   authState.selectedPerson = person || 'Éveli';
 
-  // Sincroniza quem está usando com a configuração da nuvem e histórico
   if (typeof setLoggedPerson === 'function') {
     setLoggedPerson(person);
   } else if (typeof cloudConfig !== 'undefined') {
@@ -167,14 +448,12 @@ function unlockApp(person, recordAudit = true) {
     overlay.style.display = 'none';
   }
 
-  // Atualiza crachá no cabeçalho
   updateAuthHeaderUI();
 
   if (recordAudit && typeof recordAuditLog === 'function') {
     recordAuditLog('Acesso ao Sistema', `Login efetuado por ${person}`);
   }
 
-  // Inicia monitor de inatividade
   resetInactivityTimer();
 }
 
@@ -213,7 +492,7 @@ function selectLoginProfile(person) {
 }
 
 // ----------------------------------------------------------------------------
-// PROCESSAMENTO DO FORMULÁRIO DE LOGIN
+// PROCESSAMENTO DO FORMULÁRIO DE LOGIN (EMAIL, SENHA, SUPABASE & PIN)
 // ----------------------------------------------------------------------------
 async function submitAppLogin(e) {
   if (e && e.preventDefault) e.preventDefault();
@@ -223,30 +502,146 @@ async function submitAppLogin(e) {
     return;
   }
 
+  const emailInput = document.getElementById('loginEmailInput');
   const pwdInput = document.getElementById('loginPasswordInput');
+  const email = emailInput ? emailInput.value.trim() : '';
   const password = pwdInput ? pwdInput.value : '';
   const rememberMe = document.getElementById('loginRememberMeToggle')?.checked ?? true;
+  const mode = authState.authMode || 'signin';
 
+  // 1. MODO RECUPERAÇÃO DE SENHA POR EMAIL
+  if (mode === 'recovery') {
+    if (!email || !email.includes('@')) {
+      showLoginFeedback('Por favor, informe um e-mail válido para recuperação.', 'warning');
+      if (emailInput) emailInput.focus();
+      return;
+    }
+    const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+    if (client) {
+      showLoginFeedback('Enviando e-mail de redefinição...', 'info');
+      try {
+        const { error } = await client.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.origin
+        });
+        if (error) throw error;
+        showLoginFeedback(`Link de redefinição enviado com sucesso para ${email}! Verifique sua caixa de entrada.`, 'success');
+      } catch (err) {
+        showLoginFeedback('Erro ao enviar e-mail: ' + (err.message || String(err)), 'danger');
+      }
+    } else {
+      showPasswordHint();
+    }
+    return;
+  }
+
+  // 2. MODO CADASTRO (SIGN UP)
+  if (mode === 'signup') {
+    if (!email || !email.includes('@')) {
+      showLoginFeedback('Por favor, informe um e-mail válido.', 'warning');
+      if (emailInput) emailInput.focus();
+      return;
+    }
+    if (!password || password.length < 6) {
+      showLoginFeedback('A senha deve ter pelo menos 6 caracteres.', 'warning');
+      if (pwdInput) pwdInput.focus();
+      return;
+    }
+
+    const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+    if (client) {
+      showLoginFeedback('Criando sua conta na nuvem...', 'info');
+      try {
+        const { data, error } = await client.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              person: authState.selectedPerson
+            }
+          }
+        });
+        if (error) throw error;
+
+        if (typeof cloudConfig !== 'undefined') {
+          cloudConfig.loggedEmail = email;
+          cloudConfig.loggedPerson = authState.selectedPerson;
+          if (typeof saveCloudConfig === 'function') saveCloudConfig();
+        }
+
+        showLoginFeedback(`Conta criada com sucesso para ${email}! Faça login para entrar.`, 'success');
+        setTimeout(() => setAuthMode('signin'), 1500);
+      } catch (err) {
+        showLoginFeedback('Erro ao cadastrar: ' + (err.message || String(err)), 'danger');
+      }
+    } else {
+      showLoginFeedback('Configure a URL e Anon Key do Supabase para criar conta na nuvem.', 'warning');
+    }
+    return;
+  }
+
+  // 3. MODO LOGIN POR EMAIL & SENHA OU PIN LOCAL
   if (!password) {
     showLoginFeedback('Por favor, digite sua senha de acesso.', 'warning');
     if (pwdInput) pwdInput.focus();
     return;
   }
 
+  // Se tiver e-mail preenchido e cliente Supabase ativo, autentica na nuvem
+  const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
+  if (email && email.includes('@') && client && mode !== 'pin') {
+    showLoginFeedback('Autenticando com segurança...', 'info');
+    try {
+      const { data, error } = await client.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (!error && data && data.user) {
+        // SUCESSO VIA SUPABASE AUTH!
+        const metaPerson = data.user.user_metadata?.person;
+        const resolvedPerson = metaPerson || authState.selectedPerson;
+
+        if (typeof cloudConfig !== 'undefined') {
+          cloudConfig.loggedEmail = email;
+          cloudConfig.loggedPerson = resolvedPerson;
+          if (typeof saveCloudConfig === 'function') saveCloudConfig();
+        }
+
+        saveSession(resolvedPerson, rememberMe);
+        showLoginFeedback(`Bem-vindo(a), ${resolvedPerson}! Acesso liberado.`, 'success');
+
+        setTimeout(() => {
+          unlockApp(resolvedPerson, true);
+          if (typeof pullStateFromSupabaseCloud === 'function') {
+            pullStateFromSupabaseCloud(true);
+          }
+        }, 300);
+        return;
+      }
+    } catch (err) {
+      console.warn('Falha no login Supabase, tentando validação local:', err);
+    }
+  }
+
+  // Validação Local (SHA-256 + Salt) como contingência offline
   const cfg = getStoredAuthConfig();
   if (!cfg || !cfg.passwordHash) {
     showLoginFeedback('Configuração de segurança não encontrada. Redefina a senha.', 'danger');
     return;
   }
 
-  // Gera hash e compara com a senha armazenada
   const enteredHash = await generateSha256Hash(password, cfg.salt || DEFAULT_SALT);
 
   if (enteredHash === cfg.passwordHash) {
-    // SUCESSO!
+    // SUCESSO LOCAL!
     cfg.failedAttempts = 0;
     cfg.lockoutUntil = 0;
     saveStoredAuthConfig(cfg);
+
+    if (email && typeof cloudConfig !== 'undefined') {
+      cloudConfig.loggedEmail = email;
+      if (typeof saveCloudConfig === 'function') saveCloudConfig();
+    }
 
     saveSession(authState.selectedPerson, rememberMe);
     showLoginFeedback('Acesso liberado com sucesso!', 'success');
@@ -266,7 +661,7 @@ async function submitAppLogin(e) {
       showLoginFeedback(`Muitas tentativas incorretas! Bloqueado por ${LOCKOUT_SECONDS} segundos.`, 'danger');
     } else {
       saveStoredAuthConfig(cfg);
-      showLoginFeedback(`Senha incorreta. Restam ${remaining} tentativa(s).`, 'danger');
+      showLoginFeedback(`E-mail ou senha incorretos. Restam ${remaining} tentativa(s).`, 'danger');
     }
 
     if (pwdInput) {
@@ -459,7 +854,6 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
     }, { passive: true });
   });
 
-  // Inicializa o guard quando a página carregar
   window.addEventListener('DOMContentLoaded', () => {
     initAuthGuard();
   });
