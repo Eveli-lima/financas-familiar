@@ -374,6 +374,9 @@ async function initAuthGuard() {
   const activeSession = getStoredSession();
   if (activeSession && activeSession.person) {
     unlockApp(activeSession.person, false);
+    if (typeof pullStateFromSupabaseCloud === 'function') {
+      pullStateFromSupabaseCloud(true);
+    }
     return;
   }
 
@@ -454,6 +457,10 @@ function unlockApp(person, recordAudit = true) {
   }
 
   updateAuthHeaderUI();
+
+  if (typeof subscribeToSupabaseRealtime === 'function') {
+    subscribeToSupabaseRealtime();
+  }
 
   if (recordAudit && typeof recordAuditLog === 'function') {
     recordAuditLog('Acesso ao Sistema', `Login efetuado por ${person}`);

@@ -317,7 +317,7 @@ async function signOutSupabase() {
 
 // Envia o estado atual da família para a tabela `household_state_sync` no Supabase
 async function pushStateToSupabaseCloud(silent) {
-  if (! silent) saveCloudSettingsFromModal();
+  if (!silent) saveCloudSettingsFromModal();
   const client = getSupabaseClient();
   const feedbackEl = typeof document !== 'undefined' ? document.getElementById('cloudSyncFeedbackMsg') : null;
 
@@ -329,19 +329,17 @@ async function pushStateToSupabaseCloud(silent) {
   }
 
   try {
-    if (!(await hasActiveSupabaseSession(client))) {
-      throw new Error('Faça login (e-mail e senha) antes de sincronizar com a nuvem.');
-    }
     const cleanPayload = {
       ...state,
       // Não precisa salvar parcelas auto-projetadas no banco, pois o motor recria ao abrir
       transactions: (state.transactions || []).filter(t => !t.isAutoProjected)
     };
 
+    const householdCode = cloudConfig.householdCode || 'casal_eveli_vital';
     const { error } = await client
       .from('household_state_sync')
       .upsert({
-        household_code: cloudConfig.householdCode || 'casal_eveli_vital',
+        household_code: householdCode,
         state_json: cleanPayload,
         updated_by: getLoggedPerson(),
         updated_at: new Date().toISOString()
@@ -370,40 +368,11 @@ async function pushStateToSupabaseCloud(silent) {
   }
 }
 
-// Baixa os dados mais recentes da família salvos na nuvem do Supabase
-async function pullStateFromSupabaseCloud(silent) {
-  if (!silent) saveCloudSettingsFromModal();
-  const client = getSupabaseClient();
-  const feedbackEl = typeof document !== 'undefined' ? document.getElementById('cloudSyncFeedbackMsg') : null;
-
-  if (!client) {
-    if (!silent) {
-      alert('Preencha a URL e a Anon Key do Supabase para buscar os dados da nuvem.');
-    }
-    return false;
-  }
-
+// Aplica no app os dados recebidos da nuvem
+function applyIncomingState(incomingJson, updatedBy) {
+  if (!incomingJson) return;
   try {
-    if (!(await hasActiveSupabaseSession(client))) {
-      throw new Error('Faça login (e-mail e senha) antes de baixar os dados da nuvem.');
-    }
-    const { data, error } = await client
-      .from('household_state_sync')
-      .select('state_json, updated_by, updated_at')
-      .eq('household_code', cloudConfig.householdCode || 'casal_eveli_vital')
-      .maybeSingle();
-
-    if (error) throw error;
-    if (!data || !data.state_json) {
-      if (!silent && feedbackEl) {
-        feedbackEl.className = 'text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-2.5 mt-2';
-        feedbackEl.textContent = 'Ainda não há dados salvos na nuvem para este código de família. Clique primeiro em "Enviar p/ Nuvem".';
-        feedbackEl.classList.remove('hidden');
-      }
-      return false;
-    }
-
-    const incoming = sanitizeState(data.state_json);
+    const incoming = sanitizeState(incomingJson);
     state = {
       ...getInitialFamilyData(),
       ...incoming,
@@ -419,6 +388,43 @@ async function pullStateFromSupabaseCloud(silent) {
     saveCloudConfig();
     updateAuthHeaderUI();
     if (typeof renderAll === 'function') renderAll();
+  } catch (err) {
+    console.error('Erro ao aplicar dados recebidos da nuvem:', err);
+  }
+}
+
+// Baixa os dados mais recentes da família salvos na nuvem do Supabase
+async function pullStateFromSupabaseCloud(silent) {
+  if (!silent) saveCloudSettingsFromModal();
+  const client = getSupabaseClient();
+  const feedbackEl = typeof document !== 'undefined' ? document.getElementById('cloudSyncFeedbackMsg') : null;
+
+  if (!client) {
+    if (!silent) {
+      alert('Preencha a URL e a Anon Key do Supabase para buscar os dados da nuvem.');
+    }
+    return false;
+  }
+
+  try {
+    const householdCode = cloudConfig.householdCode || 'casal_eveli_vital';
+    const { data, error } = await client
+      .from('household_state_sync')
+      .select('state_json, updated_by, updated_at')
+      .eq('household_code', householdCode)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data || !data.state_json) {
+      if (!silent && feedbackEl) {
+        feedbackEl.className = 'text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-2.5 mt-2';
+        feedbackEl.textContent = 'Ainda não há dados salvos na nuvem para este código de família. Clique primeiro em "Enviar p/ Nuvem".';
+        feedbackEl.classList.remove('hidden');
+      }
+      return false;
+    }
+
+    applyIncomingState(data.state_json, data.updated_by);
 
     if (!silent && feedbackEl) {
       feedbackEl.className = 'text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 mt-2';
@@ -436,6 +442,40 @@ async function pullStateFromSupabaseCloud(silent) {
   }
 }
 
+// Canal de Sincronização em Tempo Real (Supabase Realtime WebSockets)
+let realtimeChannelInstance = null;
+function subscribeToSupabaseRealtime() {
+  const client = getSupabaseClient();
+  if (!client || typeof client.channel !== 'function') return;
+
+  try {
+    if (realtimeChannelInstance && typeof client.removeChannel === 'function') {
+      client.removeChannel(realtimeChannelInstance);
+    }
+
+    const code = cloudConfig.householdCode || 'casal_eveli_vital';
+    realtimeChannelInstance = client
+      .channel(`household_realtime_${code}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'household_state_sync',
+          filter: `household_code=eq.${code}`
+        },
+        payload => {
+          if (payload.new && payload.new.state_json) {
+            applyIncomingState(payload.new.state_json, payload.new.updated_by);
+          }
+        }
+      )
+      .subscribe();
+  } catch (e) {
+    console.warn('Realtime subscription:', e);
+  }
+}
+
 // Agenda envio automático em background quando o casal altera dados e a nuvem está configurada
 function scheduleCloudAutoSync() {
   if (!cloudConfig.autoSync || !cloudConfig.supabaseUrl || !cloudConfig.supabaseAnonKey) return;
@@ -443,4 +483,19 @@ function scheduleCloudAutoSync() {
   autoSyncTimer = setTimeout(() => {
     pushStateToSupabaseCloud(true);
   }, 1500);
+}
+
+// Sincroniza automaticamente quando o usuário volta para a aba do navegador
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('focus', () => {
+    if (cloudConfig.supabaseUrl && typeof authState !== 'undefined' && authState.isUnlocked) {
+      pullStateFromSupabaseCloud(true);
+    }
+  });
+
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && cloudConfig.supabaseUrl && typeof authState !== 'undefined' && authState.isUnlocked) {
+      pullStateFromSupabaseCloud(true);
+    }
+  });
 }

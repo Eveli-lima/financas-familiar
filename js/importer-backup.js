@@ -126,6 +126,9 @@ function resetRealData() {
   }
   state = fresh;
   saveState();
+  if (typeof pushStateToSupabaseCloud === 'function') {
+    pushStateToSupabaseCloud(true);
+  }
   renderAll();
   closeBackupModal();
   alert('✨ Sistema zerado com sucesso! Saldo inicial R$ 0,00, pronto para novos lançamentos e importações a partir de Setembro/2026.');
