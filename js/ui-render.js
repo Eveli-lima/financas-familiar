@@ -525,33 +525,51 @@ function renderAll() {
     `;
   }
 
-  // 4.2 Renderiza o FAQ do Educador Financeiro na Visão Geral
+  // 4.2 Renderiza o FAQ do Educador Financeiro na Visão Geral (Recolhível por toque)
   const faqCard = document.getElementById('financialCoachFaqCard');
   if (faqCard && typeof FINANCIAL_COACH_FAQ !== 'undefined') {
+    const isFaqExpanded = isCollapsibleCardExpanded('financial_faq', false);
     faqCard.innerHTML = `
-      <div>
-        <div class="flex items-center justify-between mb-1.5">
-          <span class="text-xs font-semibold uppercase tracking-wider text-sky-700/80">Educador Financeiro</span>
-          <span class="text-[11px] font-medium text-sky-700 bg-sky-50 px-2 py-0.5 rounded-md border border-sky-200/60">Dúvidas Rápidas</span>
-        </div>
-        <h4 class="font-bold text-sm text-slate-900 mb-2">Perguntas Frequentes do Casal</h4>
-        <div class="space-y-2">
-          ${FINANCIAL_COACH_FAQ.slice(0, 3).map((item) => `
-            <details class="bg-sky-50/50 rounded-xl border border-sky-100/80 p-2.5 text-xs group cursor-pointer">
-              <summary class="font-semibold text-slate-800 list-none flex items-center justify-between gap-2">
-                <span>❓ ${escapeHtml(item.q)}</span>
-                <span class="text-sky-600 font-bold group-open:rotate-180 transition-transform text-[11px]">▼</span>
-              </summary>
-              <div class="mt-2 text-slate-600 leading-relaxed pt-2 border-t border-sky-100/70 text-[11px]">
-                ${item.a}
+      <div class="overflow-hidden h-full flex flex-col justify-between">
+        <div>
+          <button 
+            type="button" 
+            onclick="toggleCollapsibleCard('financialFaqBody', 'financialFaqChevron', 'financial_faq')"
+            class="w-full flex items-center justify-between text-left collapsible-faixa select-none p-1 -m-1 rounded-xl transition"
+          >
+            <div class="flex items-center gap-2">
+              <span class="text-base">🎓</span>
+              <div>
+                <span class="text-[10px] font-semibold uppercase tracking-wider text-sky-700/80 block">Educador Financeiro</span>
+                <h4 class="font-bold text-xs sm:text-sm text-slate-900">Perguntas Frequentes do Casal</h4>
               </div>
-            </details>
-          `).join('')}
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="text-[10px] font-semibold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-md border border-sky-200/60 hidden sm:inline-block">Dúvidas Rápidas</span>
+              <span id="financialFaqChevron" class="text-xs text-sky-700 font-bold bg-sky-100/70 w-6 h-6 rounded-full flex items-center justify-center transition-transform">
+                ${isFaqExpanded ? '▲' : '▼'}
+              </span>
+            </div>
+          </button>
+
+          <div id="financialFaqBody" class="${isFaqExpanded ? '' : 'hidden'} mt-3 space-y-2 pt-2 border-t border-sky-100">
+            ${FINANCIAL_COACH_FAQ.slice(0, 3).map((item) => `
+              <details class="bg-sky-50/50 rounded-xl border border-sky-100/80 p-2.5 text-xs group cursor-pointer">
+                <summary class="font-semibold text-slate-800 list-none flex items-center justify-between gap-2">
+                  <span>❓ ${escapeHtml(item.q)}</span>
+                  <span class="text-sky-600 font-bold group-open:rotate-180 transition-transform text-[11px]">▼</span>
+                </summary>
+                <div class="mt-2 text-slate-600 leading-relaxed pt-2 border-t border-sky-100/70 text-[11px]">
+                  ${item.a}
+                </div>
+              </details>
+            `).join('')}
+            <div class="mt-3 pt-2 border-t border-sky-100 flex items-center justify-between text-xs">
+              <span class="text-slate-500">Aprenda sem complicação</span>
+              <button onclick="openAiAdvisorModal()" class="text-sky-700 hover:text-sky-900 font-semibold underline shrink-0">Abrir Assistente Completo →</button>
+            </div>
+          </div>
         </div>
-      </div>
-      <div class="mt-4 pt-3 border-t border-sky-100 flex items-center justify-between text-xs">
-        <span class="text-slate-500">Aprenda sem complicação</span>
-        <button onclick="openAiAdvisorModal()" class="text-sky-700 hover:text-sky-900 font-semibold underline shrink-0">Abrir Assistente Completo →</button>
       </div>
     `;
   }
@@ -1179,68 +1197,86 @@ function renderPlainLanguageDiagnostic(p, summary, owner) {
     `;
   }
 
+  const isExpanded = isCollapsibleCardExpanded('plain_diagnostic', false);
+
   container.innerHTML = `
-    <div class="bg-white rounded-2xl p-4 sm:p-5 border border-sky-200/80 shadow-sm shadow-sky-900/[0.03] mb-4">
-      <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+    <div class="bg-white rounded-2xl border border-sky-200/80 shadow-sm shadow-sky-900/[0.03] overflow-hidden mb-4">
+      <button 
+        type="button" 
+        onclick="toggleCollapsibleCard('plainDiagnosticBody', 'plainDiagnosticIcon', 'plain_diagnostic')" 
+        class="w-full flex flex-wrap items-center justify-between gap-2 p-3.5 sm:p-4 text-left hover:bg-sky-50/50 collapsible-faixa select-none transition"
+      >
+        <div class="flex items-center gap-2.5">
+          <span class="text-base sm:text-lg">📖</span>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="font-bold text-xs sm:text-sm md:text-base text-slate-900">Resumo Descomplicado da IA — ${pLabel}</h3>
+              <span class="text-[10px] font-semibold bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full uppercase">Didático</span>
+            </div>
+            <p class="text-[11px] text-slate-500 mt-0.5">Diagnóstico em linguagem simples de dinheiro real e cartões</p>
+          </div>
+        </div>
         <div class="flex items-center gap-2">
-          <span class="text-base">📖</span>
-          <h3 class="font-bold text-sm sm:text-base text-slate-900">Resumo Descomplicado — ${pLabel}</h3>
-          <span class="text-[10px] font-semibold bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full uppercase">Didático</span>
+          <div>${bankStatusBadge}</div>
+          <span id="plainDiagnosticIcon" class="text-xs text-sky-700 font-bold bg-sky-100/70 w-6 h-6 rounded-full flex items-center justify-center transition-transform">
+            ${isExpanded ? '▲' : '▼'}
+          </span>
         </div>
-        <div>${bankStatusBadge}</div>
-      </div>
+      </button>
 
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-        <!-- Coluna 1: Conta Bancária Itaú -->
-        <div class="p-3 rounded-xl bg-slate-50/70 border border-slate-200/70">
-          <div class="flex items-center justify-between font-semibold text-slate-800 mb-1.5">
-            <span>🏦 Conta Conjunta Itaú</span>
-            <span class="text-[10px] text-slate-500">Dinheiro Vivo</span>
+      <div id="plainDiagnosticBody" class="${isExpanded ? '' : 'hidden'} border-t border-sky-100 p-4 sm:p-5">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+          <!-- Coluna 1: Conta Bancária Itaú -->
+          <div class="p-3 rounded-xl bg-slate-50/70 border border-slate-200/70">
+            <div class="flex items-center justify-between font-semibold text-slate-800 mb-1.5">
+              <span>🏦 Conta Conjunta Itaú</span>
+              <span class="text-[10px] text-slate-500">Dinheiro Vivo</span>
+            </div>
+            <div class="space-y-1 text-slate-600">
+              <div class="flex justify-between"><span>Saldo inicial recebido:</span> <strong>${formatCentsBRL(prevBalanceCents)}</strong></div>
+              <div class="flex justify-between text-emerald-700"><span>Entrou (Salários/PIX):</span> <strong>+ ${formatCentsBRL(totalInBankInflow)}</strong></div>
+              <div class="flex justify-between text-slate-700"><span>Saiu (Contas/Faturas):</span> <strong>- ${formatCentsBRL(totalBankDebitCents)}</strong></div>
+              <div class="flex justify-between pt-1 border-t border-slate-200 font-bold ${bankEndingBalanceCents >= 0 ? 'text-emerald-700' : 'text-rose-600'}">
+                <span>Saldo na Conta Hoje:</span> <span>${formatCentsBRL(bankEndingBalanceCents)}</span>
+              </div>
+            </div>
           </div>
-          <div class="space-y-1 text-slate-600">
-            <div class="flex justify-between"><span>Saldo inicial recebido:</span> <strong>${formatCentsBRL(prevBalanceCents)}</strong></div>
-            <div class="flex justify-between text-emerald-700"><span>Entrou (Salários/PIX):</span> <strong>+ ${formatCentsBRL(totalInBankInflow)}</strong></div>
-            <div class="flex justify-between text-slate-700"><span>Saiu (Contas/Faturas):</span> <strong>- ${formatCentsBRL(totalBankDebitCents)}</strong></div>
-            <div class="flex justify-between pt-1 border-t border-slate-200 font-bold ${bankEndingBalanceCents >= 0 ? 'text-emerald-700' : 'text-rose-600'}">
-              <span>Saldo na Conta Hoje:</span> <span>${formatCentsBRL(bankEndingBalanceCents)}</span>
+
+          <!-- Coluna 2: Cartões de Crédito -->
+          <div class="p-3 rounded-xl bg-slate-50/70 border border-slate-200/70">
+            <div class="flex items-center justify-between font-semibold text-slate-800 mb-1.5">
+              <span>💳 Cartões de Crédito</span>
+              <span class="text-[10px] text-slate-500">Gastos no Mês</span>
+            </div>
+            <div class="space-y-1 text-slate-600">
+              <div class="flex justify-between"><span>Cartão Éveli (MC Gold):</span> <strong class="text-slate-800">${formatCentsBRL(cardEveliCents)}</strong></div>
+              <div class="flex justify-between"><span>Cartão Vital:</span> <strong class="text-slate-800">${formatCentsBRL(cardMaridoCents)}</strong></div>
+              <div class="flex justify-between text-[11px] text-sky-800"><span>Faturas pagas no banco:</span> <strong>${formatCentsBRL(totalInvoicePaidInBankCents)}</strong></div>
+              <div class="flex justify-between pt-1 border-t border-slate-200 font-bold text-slate-900">
+                <span>Total Compras Cartão:</span> <span>${formatCentsBRL(cardEveliCents + cardMaridoCents)}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Coluna 3: Visão Final do Casal -->
+          <div class="p-3 rounded-xl bg-slate-50/70 border border-slate-200/70">
+            <div class="flex items-center justify-between font-semibold text-slate-800 mb-1.5">
+              <span>⚖️ Balanço Geral Projetado</span>
+              <span class="text-[10px] text-slate-500">${state.includeCurrentCardBill ? 'Conta - Cartão' : 'Só Conta'}</span>
+            </div>
+            <p class="text-slate-600 text-[11px] leading-relaxed">
+              ${state.includeCurrentCardBill
+                ? `Mostra quanto sobra se a fatura de <strong>${formatCentsBRL(cardEveliCents + cardMaridoCents)}</strong> for paga com o saldo da conta.`
+                : 'Mostra estritamente o dinheiro que está disponível na conta corrente Itaú hoje.'}
+            </p>
+            <div class="mt-2 text-center p-2 rounded-lg ${projectedBalanceCents >= 0 ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'} font-bold text-sm">
+              ${formatCentsBRL(projectedBalanceCents)}
             </div>
           </div>
         </div>
 
-        <!-- Coluna 2: Cartões de Crédito -->
-        <div class="p-3 rounded-xl bg-slate-50/70 border border-slate-200/70">
-          <div class="flex items-center justify-between font-semibold text-slate-800 mb-1.5">
-            <span>💳 Cartões de Crédito</span>
-            <span class="text-[10px] text-slate-500">Gastos no Mês</span>
-          </div>
-          <div class="space-y-1 text-slate-600">
-            <div class="flex justify-between"><span>Cartão Éveli (MC Gold):</span> <strong class="text-slate-800">${formatCentsBRL(cardEveliCents)}</strong></div>
-            <div class="flex justify-between"><span>Cartão Vital:</span> <strong class="text-slate-800">${formatCentsBRL(cardMaridoCents)}</strong></div>
-            <div class="flex justify-between text-[11px] text-sky-800"><span>Faturas pagas no banco:</span> <strong>${formatCentsBRL(totalInvoicePaidInBankCents)}</strong></div>
-            <div class="flex justify-between pt-1 border-t border-slate-200 font-bold text-slate-900">
-              <span>Total Compras Cartão:</span> <span>${formatCentsBRL(cardEveliCents + cardMaridoCents)}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Coluna 3: Visão Final do Casal -->
-        <div class="p-3 rounded-xl bg-slate-50/70 border border-slate-200/70">
-          <div class="flex items-center justify-between font-semibold text-slate-800 mb-1.5">
-            <span>⚖️ Balanço Geral Projetado</span>
-            <span class="text-[10px] text-slate-500">${state.includeCurrentCardBill ? 'Conta - Cartão' : 'Só Conta'}</span>
-          </div>
-          <p class="text-slate-600 text-[11px] leading-relaxed">
-            ${state.includeCurrentCardBill
-              ? `Mostra quanto sobra se a fatura de <strong>${formatCentsBRL(cardEveliCents + cardMaridoCents)}</strong> for paga com o saldo da conta.`
-              : 'Mostra estritamente o dinheiro que está disponível na conta corrente Itaú hoje.'}
-          </p>
-          <div class="mt-2 text-center p-2 rounded-lg ${projectedBalanceCents >= 0 ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'} font-bold text-sm">
-            ${formatCentsBRL(projectedBalanceCents)}
-          </div>
-        </div>
+        ${contextualNote}
       </div>
-
-      ${contextualNote}
     </div>
   `;
 }
@@ -1322,21 +1358,36 @@ function renderConsolidatedAllMonthsSection(owner, scopeFilter) {
   }).join('');
 
   const currentBankEnding = evolution.find(r => r.period === '2026-10')?.bankEndingCents ?? 0;
+  const isExpanded = isCollapsibleCardExpanded('consolidated_annual', false);
 
   container.innerHTML = `
-    <div>
-      <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
-        <div>
-          <div class="flex items-center gap-2">
-            <span class="text-base">📊</span>
-            <h4 class="font-bold text-sm sm:text-base text-slate-900">Quadro de Resumo Anual (Mês a Mês - Set/2026 em Diante)</h4>
-            <span class="text-[10px] font-semibold bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full uppercase">Isolado</span>
+    <div class="overflow-hidden">
+      <button 
+        type="button" 
+        onclick="toggleCollapsibleCard('consolidatedAnnualBody', 'consolidatedAnnualChevron', 'consolidated_annual')"
+        class="w-full flex flex-wrap items-center justify-between gap-3 text-left hover:bg-sky-50/60 p-2 -m-2 rounded-xl collapsible-faixa select-none transition"
+      >
+        <div class="flex items-center gap-2.5">
+          <span class="text-base sm:text-lg">📊</span>
+          <div>
+            <div class="flex items-center gap-2">
+              <h4 class="font-bold text-xs sm:text-sm md:text-base text-slate-900">Quadro de Resumo Anual (Todos os Meses)</h4>
+              <span class="text-[10px] font-semibold bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full uppercase">Isolado</span>
+            </div>
+            <p class="text-[11px] text-slate-500 mt-0.5">
+              Saldo anterior somado mês a mês, entradas/saídas da conta e saldo final acumulado
+            </p>
           </div>
-          <p class="text-xs text-slate-500 mt-0.5">
-            Acompanhe o saldo anterior somado mês a mês, as entradas e saídas da conta bancária e o saldo final acumulado
-          </p>
         </div>
-      </div>
+        <div class="flex items-center gap-2">
+          <span class="text-[11px] font-semibold text-sky-700 hidden sm:inline-block">Toque para ${isExpanded ? 'recolher' : 'expandir'}</span>
+          <span id="consolidatedAnnualChevron" class="text-xs text-sky-700 font-bold bg-sky-100/70 w-6 h-6 rounded-full flex items-center justify-center transition-transform">
+            ${isExpanded ? '▲' : '▼'}
+          </span>
+        </div>
+      </button>
+
+      <div id="consolidatedAnnualBody" class="${isExpanded ? '' : 'hidden'} mt-4 pt-3 border-t border-sky-100">
 
       <!-- Banner Explicativo da Matemática Financeira -->
       <div class="mb-4 p-3 rounded-2xl bg-sky-50/70 border border-sky-200/80 text-xs text-sky-950 flex flex-wrap items-center justify-between gap-2 shadow-xs">
@@ -1476,6 +1527,7 @@ function renderConsolidatedAllMonthsSection(owner, scopeFilter) {
           </tfoot>
         </table>
       </div>
+      </div>
     </div>
   `;
 }
@@ -1485,6 +1537,9 @@ if (typeof window !== 'undefined') {
     // Isola os meses automaticamente caso arquivos importados tenham misturado períodos
     if (typeof reorganizeAndIsolateMonths === 'function') {
       reorganizeAndIsolateMonths(false);
+    }
+    if (typeof restoreCollapsibleCardsState === 'function') {
+      restoreCollapsibleCardsState();
     }
     renderAll();
     if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.protocol === 'http:')) {

@@ -90,3 +90,78 @@ function formatPeriodLabel(periodStr) {
   if (idx >= 0 && idx < 12) return `${names[idx]}/${String(y).slice(-2)}`;
   return periodStr;
 }
+
+// ============================================================================
+// ACORDEÕES E CARDS RECOLHÍVEIS (Interface Limpa com Toque na Faixa)
+// ============================================================================
+
+// Verifica se um card recolhível deve estar aberto ou fechado (com persistência em localStorage)
+function isCollapsibleCardExpanded(storageKey, defaultVal = false) {
+  if (typeof localStorage === 'undefined' || !storageKey) return defaultVal;
+  try {
+    const val = localStorage.getItem('card_expanded_' + storageKey);
+    if (val === null) return defaultVal;
+    return val === 'true';
+  } catch (e) {
+    return defaultVal;
+  }
+}
+
+// Alterna o estado recolhido/expandido de um card ao tocar na faixa
+function toggleCollapsibleCard(contentId, iconId, storageKey, onToggleCallback) {
+  if (typeof document === 'undefined') return;
+  const content = document.getElementById(contentId);
+  const icon = iconId ? document.getElementById(iconId) : null;
+  if (!content) return;
+
+  const isHidden = content.classList.contains('hidden');
+  if (isHidden) {
+    content.classList.remove('hidden');
+    if (icon) {
+      icon.textContent = '▲';
+    }
+    if (storageKey && typeof localStorage !== 'undefined') {
+      try { localStorage.setItem('card_expanded_' + storageKey, 'true'); } catch (e) {}
+    }
+  } else {
+    content.classList.add('hidden');
+    if (icon) {
+      icon.textContent = '▼';
+    }
+    if (storageKey && typeof localStorage !== 'undefined') {
+      try { localStorage.setItem('card_expanded_' + storageKey, 'false'); } catch (e) {}
+    }
+  }
+
+  if (typeof onToggleCallback === 'function') {
+    onToggleCallback(!isHidden);
+  }
+}
+
+// Restaura o estado persistido de um card recolhível
+function applyCollapsibleCardState(contentId, iconId, storageKey, defaultVal = false) {
+  if (typeof document === 'undefined') return;
+  const content = document.getElementById(contentId);
+  const icon = iconId ? document.getElementById(iconId) : null;
+  if (!content) return;
+  const expanded = isCollapsibleCardExpanded(storageKey, defaultVal);
+  if (expanded) {
+    content.classList.remove('hidden');
+    if (icon) icon.textContent = '▲';
+  } else {
+    content.classList.add('hidden');
+    if (icon) icon.textContent = '▼';
+  }
+}
+
+// Restaura os cards recolhíveis estáticos na inicialização
+function restoreCollapsibleCardsState() {
+  if (typeof document === 'undefined') return;
+  applyCollapsibleCardState('aiInsightsCardContent', 'aiInsightsChevron', 'ai_insights', false);
+  applyCollapsibleCardState('accountsAndCardsSectionWrapper', 'accountsAndCardsChevron', 'accounts_cards', false);
+  applyCollapsibleCardState('bankSummaryCardsContainer', 'bankSummaryCardsChevron', 'bank_cards', false);
+  applyCollapsibleCardState('radarCollapsibleBody', 'radarCollapsibleChevron', 'radar_cards', false);
+  applyCollapsibleCardState('dailyExpenseFormWrapper', 'dailyExpenseFormChevron', 'daily_form', false);
+  applyCollapsibleCardState('newGoalFormContainer', 'newGoalFormChevron', 'goals_form', false);
+}
+

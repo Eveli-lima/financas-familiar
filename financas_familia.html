@@ -360,17 +360,31 @@
       <!-- 1.1 Diagnóstico Educativo & Resumo Descomplicado da IA -->
       <section id="plainLanguageDiagnosticContainer"></section>
 
-      <!-- 1.2 Dicas & Alertas Proativos da IA (Assistente de Bolso para a Família) -->
-      <section>
-        <div class="flex items-center justify-between mb-2.5">
-          <div class="flex items-center gap-2">
-            <span class="text-base">💡</span>
-            <h3 class="font-bold text-sm sm:text-base text-slate-900">Dicas & Alertas da IA para a Família</h3>
-            <span class="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full uppercase">Inteligência Financeira</span>
+      <!-- 1.2 Dicas & Alertas Proativos da IA (Assistente de Bolso para a Família - Recolhível por toque na faixa) -->
+      <section class="bg-white rounded-2xl border border-sky-200/80 shadow-sm shadow-sky-900/[0.03] overflow-hidden">
+        <button 
+          type="button" 
+          onclick="toggleCollapsibleCard('aiInsightsCardContent', 'aiInsightsChevron', 'ai_insights')" 
+          class="w-full flex items-center justify-between p-3.5 sm:p-4 text-left hover:bg-sky-50/50 collapsible-faixa select-none transition"
+        >
+          <div class="flex items-center gap-2.5">
+            <span class="text-base sm:text-lg">💡</span>
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="font-bold text-xs sm:text-sm md:text-base text-slate-900">Dicas & Alertas da IA para a Família</h3>
+                <span class="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full uppercase">Inteligência Financeira</span>
+              </div>
+              <p class="text-[11px] text-slate-500 mt-0.5">Orientações automáticas e personalizadas do mês</p>
+            </div>
           </div>
-          <span class="text-xs text-slate-500">Orientações automáticas e personalizadas</span>
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] font-semibold text-sky-700 hidden sm:inline-block">Toque para ver dicas</span>
+            <span id="aiInsightsChevron" class="text-xs text-sky-700 font-bold bg-sky-100/70 w-6 h-6 rounded-full flex items-center justify-center transition-transform">▼</span>
+          </div>
+        </button>
+        <div id="aiInsightsCardContent" class="hidden border-t border-sky-100 p-3.5 sm:p-4">
+          <div id="aiInsightsContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5"></div>
         </div>
-        <div id="aiInsightsContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5"></div>
       </section>
 
       <!-- 1.3 Os 4 Números-Chave do Mês Selecionado -->
@@ -442,16 +456,31 @@
         </div>
       </section>
 
-      <!-- 1.4 Os 4 Pilares Financeiros: Conta Conjunta Itaú + Poupanças & Investimentos + 2 Cartões -->
-      <section>
-        <div class="flex items-center justify-between mb-2.5">
-          <div class="flex items-center gap-2">
-            <span class="text-base">🏛️</span>
-            <h3 class="font-bold text-sm sm:text-base text-slate-900">Pilares do Patrimônio & Contas da Família</h3>
+      <!-- 1.4 Os 4 Pilares Financeiros: Conta Conjunta Itaú + Poupanças & Investimentos + 2 Cartões (Recolhível por toque) -->
+      <section class="bg-white rounded-2xl border border-sky-200/70 shadow-sm shadow-sky-900/[0.03] overflow-hidden">
+        <button 
+          type="button" 
+          onclick="toggleCollapsibleCard('accountsAndCardsSectionWrapper', 'accountsAndCardsChevron', 'accounts_cards')" 
+          class="w-full flex items-center justify-between p-3.5 sm:p-4 text-left hover:bg-sky-50/50 collapsible-faixa select-none transition"
+        >
+          <div class="flex items-center gap-2.5">
+            <span class="text-base sm:text-lg">🏛️</span>
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="font-bold text-xs sm:text-sm md:text-base text-slate-900">Pilares do Patrimônio & Contas da Família</h3>
+                <span class="text-[10px] font-semibold bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full hidden sm:inline-block">Saldos & Limites</span>
+              </div>
+              <p class="text-[11px] text-slate-500 mt-0.5">Conta Corrente Itaú, Cartão Éveli, Cartão Vital e Poupanças</p>
+            </div>
           </div>
-          <span class="text-xs text-slate-500">Saldos e limites em tempo real</span>
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] font-semibold text-sky-700 hidden sm:inline-block">Toque para ver contas</span>
+            <span id="accountsAndCardsChevron" class="text-xs text-sky-700 font-bold bg-sky-100/70 w-6 h-6 rounded-full flex items-center justify-center transition-transform">▼</span>
+          </div>
+        </button>
+        <div id="accountsAndCardsSectionWrapper" class="hidden border-t border-sky-100 p-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="accountsAndCardsSection"></div>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="accountsAndCardsSection"></div>
       </section>
 
       <!-- 1.5 Metas da Família & Dúvidas Frequentes Explicadas para Leigos -->
@@ -501,11 +530,20 @@
               <span>✏️</span>
               <span>Ajustar Saldo</span>
             </button>
+            <button 
+              type="button" 
+              onclick="toggleCollapsibleCard('bankSummaryCardsContainer', 'bankSummaryCardsChevron', 'bank_cards')" 
+              class="text-xs bg-sky-100/90 hover:bg-sky-200 text-sky-900 font-bold px-3 py-2 rounded-xl transition flex items-center gap-1.5 collapsible-faixa"
+              title="Expandir ou recolher resumo de saldos da conta"
+            >
+              <span>📊 Resumo de Saldos</span>
+              <span id="bankSummaryCardsChevron" class="text-[10px] text-sky-800 font-bold">▼</span>
+            </button>
           </div>
         </div>
 
-        <!-- 5 Cards de Resumo da Conta no Período -->
-        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <!-- 5 Cards de Resumo da Conta no Período (Recolhível por toque) -->
+        <div id="bankSummaryCardsContainer" class="hidden mt-4 pt-1 grid grid-cols-2 sm:grid-cols-5 gap-3">
           <div class="bg-slate-50/80 p-3 rounded-xl border border-slate-200/70">
             <span class="text-[10px] font-semibold uppercase text-slate-500 block">1. Saldo Inicial</span>
             <strong id="bankTabPrevBalance" class="text-sm sm:text-base font-bold text-slate-800 block mt-1">R$ 0,00</strong>
@@ -604,21 +642,34 @@
       <!-- Cabeçalho e Painéis dos 2 Cartões (Éveli & Vital) -->
       <section class="grid grid-cols-1 md:grid-cols-2 gap-4" id="cardsTabHeaderSection"></section>
 
-      <!-- Radar de Projeção de Parcelamentos -->
-      <section class="bg-white border border-sky-200/70 shadow-sm shadow-sky-900/[0.03] rounded-2xl p-5 sm:p-6">
-        <div class="flex flex-wrap items-center justify-between gap-4 pb-4 mb-4 border-b border-sky-100">
+      <!-- Radar de Projeção de Parcelamentos (Recolhível por toque na faixa para dar destaque à lista de compras) -->
+      <section class="bg-white border border-sky-200/70 shadow-sm shadow-sky-900/[0.03] rounded-2xl overflow-hidden">
+        <button 
+          type="button" 
+          onclick="toggleCollapsibleCard('radarCollapsibleBody', 'radarCollapsibleChevron', 'radar_cards')"
+          class="w-full flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5 text-left hover:bg-sky-50/50 collapsible-faixa select-none transition"
+        >
           <div>
-            <span class="text-[11px] font-semibold uppercase tracking-wider text-sky-700/80">
-              Projeção de Parcelamentos nos Cartões
-            </span>
-            <h3 id="radarHeadline" class="text-base sm:text-lg font-bold text-slate-900 mt-0.5">
+            <div class="flex items-center gap-2">
+              <span class="text-base sm:text-lg">🔮</span>
+              <span class="text-xs sm:text-sm font-bold text-slate-900">
+                Radar de Projeção de Parcelamentos Futuros
+              </span>
+              <span class="text-[10px] font-semibold bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full">Previsão</span>
+            </div>
+            <p id="radarHeadline" class="text-xs font-semibold text-slate-600 mt-0.5">
               Carregando análise de parcelas...
-            </h3>
+            </p>
           </div>
-          <div id="radarLimitsBox" class="text-right bg-sky-50/70 px-3.5 py-2 rounded-xl border border-sky-200/70 text-xs text-slate-600"></div>
-        </div>
+          <div class="flex items-center gap-3">
+            <div id="radarLimitsBox" class="text-right bg-sky-50/70 px-3 py-1.5 rounded-xl border border-sky-200/70 text-xs text-slate-600 hidden sm:block"></div>
+            <span id="radarCollapsibleChevron" class="text-xs text-sky-700 font-bold bg-sky-100/70 w-6 h-6 rounded-full flex items-center justify-center transition-transform">▼</span>
+          </div>
+        </button>
 
-        <div id="radarInstallmentsGrid" class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs"></div>
+        <div id="radarCollapsibleBody" class="hidden border-t border-sky-100 p-4 sm:p-6">
+          <div id="radarInstallmentsGrid" class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs"></div>
+        </div>
       </section>
 
       <!-- Lista e Extrato de Compras dos Cartões de Crédito -->
@@ -724,115 +775,132 @@
         </div>
       </section>
 
-      <!-- Formulário de Lançamento Diário (Escrever ou Fotografar Nota Fiscal) -->
-      <section class="bg-white border border-sky-200/70 shadow-sm shadow-sky-900/[0.03] rounded-2xl p-5">
-        <div class="flex flex-wrap items-center justify-between gap-3 pb-3 mb-4 border-b border-sky-100">
-          <div>
-            <h4 class="font-bold text-sm sm:text-base text-slate-900">Novo Lançamento Diário</h4>
-            <p class="text-xs text-slate-500">Escreva o gasto ou anexe a foto da nota fiscal para arquivar e conciliar</p>
+      <!-- Formulário de Lançamento Diário (Recolhível por toque na faixa para dar destaque imediato à lista de gastos) -->
+      <section class="bg-white border border-sky-200/70 shadow-sm shadow-sky-900/[0.03] rounded-2xl overflow-hidden">
+        <button 
+          type="button" 
+          onclick="toggleCollapsibleCard('dailyExpenseFormWrapper', 'dailyExpenseFormChevron', 'daily_form')"
+          class="w-full flex items-center justify-between p-4 sm:p-5 text-left hover:bg-sky-50/50 collapsible-faixa select-none transition"
+        >
+          <div class="flex items-center gap-2.5">
+            <span class="text-base sm:text-lg">➕</span>
+            <div>
+              <div class="flex items-center gap-2">
+                <h4 class="font-bold text-xs sm:text-sm text-slate-900">Novo Lançamento Diário</h4>
+                <span class="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full uppercase">Cadastrar Gasto</span>
+              </div>
+              <p class="text-[11px] text-slate-500 mt-0.5">Escreva o gasto ou anexe foto da nota fiscal</p>
+            </div>
           </div>
           <div class="flex items-center gap-2">
-            <button type="button" onclick="document.getElementById('receiptFileInput').click()" class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 font-semibold px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-xs">
+            <span class="text-[11px] font-semibold text-emerald-700 hidden sm:inline-block">Toque para abrir formulário</span>
+            <span id="dailyExpenseFormChevron" class="text-xs text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 w-6 h-6 rounded-full flex items-center justify-center transition-transform">▼</span>
+          </div>
+        </button>
+
+        <div id="dailyExpenseFormWrapper" class="hidden border-t border-sky-100 p-4 sm:p-5">
+          <div class="flex items-center justify-end mb-3">
+            <button type="button" onclick="document.getElementById('receiptFileInput').click()" class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 font-semibold px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow-xs">
               <span>📷</span>
               <span>Tirar Foto / Anexar Nota</span>
             </button>
             <input type="file" id="receiptFileInput" accept="image/*" capture="environment" onchange="handleReceiptPhotoUpload(event)" class="hidden" />
           </div>
+
+          <!-- Pré-visualização da Foto da Nota Fiscal (quando anexada) -->
+          <div id="receiptPreviewBox" class="hidden mb-4 p-3 bg-indigo-50/50 border border-indigo-200 rounded-xl flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+              <img id="receiptPreviewImg" src="" alt="Nota Fiscal" class="w-14 h-14 object-cover rounded-lg border border-indigo-200 shadow-xs" />
+              <div>
+                <span class="text-xs font-bold text-indigo-950 block">📷 Foto da Nota Fiscal Anexada</span>
+                <span class="text-[10px] text-indigo-700">Esta imagem será guardada com o lançamento diário</span>
+              </div>
+            </div>
+            <button type="button" onclick="removeReceiptPhoto()" class="text-xs text-rose-600 hover:text-rose-800 font-bold px-2 py-1">✕ Remover Foto</button>
+          </div>
+
+          <form id="dailyExpenseForm" onsubmit="saveDailyExpense(event)" class="grid grid-cols-1 sm:grid-cols-12 gap-3.5 text-xs">
+            <!-- Valor -->
+            <div class="sm:col-span-3">
+              <label class="block font-bold text-slate-700 mb-1">Valor (R$) *</label>
+              <input type="number" inputmode="decimal" step="0.01" min="0.01" id="dailyAmount" placeholder="0,00" required class="w-full border border-sky-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-900 focus:outline-none focus:border-sky-400" />
+            </div>
+
+            <!-- Tipo de Transação -->
+            <div class="sm:col-span-3">
+              <label class="block font-bold text-slate-700 mb-1">Forma de Pagamento *</label>
+              <select id="dailyPaymentMethod" onchange="document.getElementById('dailyCardHolderBox').classList.toggle('hidden', this.value !== 'credit_card')" class="w-full border border-sky-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 bg-white focus:outline-none focus:border-sky-400">
+                <option value="pix">💠 PIX</option>
+                <option value="debit_card">💳 Cartão de Débito (Itaú)</option>
+                <option value="credit_card">💳 Cartão de Crédito</option>
+                <option value="cash">💵 Dinheiro Vivo</option>
+                <option value="other">Outros</option>
+              </select>
+            </div>
+
+            <!-- Titular do Cartão (aparece se for crédito) -->
+            <div id="dailyCardHolderBox" class="hidden sm:col-span-2">
+              <label class="block font-bold text-slate-700 mb-1">Titular do Cartão</label>
+              <select id="dailyCardHolder" class="w-full border border-sky-200 rounded-xl px-2.5 py-2 text-xs font-medium text-slate-800 bg-white">
+                <option value="Éveli">Cartão Éveli (5544)</option>
+                <option value="Vital">Cartão Vital</option>
+              </select>
+            </div>
+
+            <!-- Direção: Entrada ou Saída -->
+            <div class="sm:col-span-2">
+              <label class="block font-bold text-slate-700 mb-1">Tipo</label>
+              <div class="flex items-center gap-2 pt-1.5">
+                <label class="inline-flex items-center gap-1 text-slate-700 cursor-pointer font-medium">
+                  <input type="radio" name="dailyDirection" value="expense" checked class="text-rose-600 focus:ring-0" />
+                  <span>🔴 Saída</span>
+                </label>
+                <label class="inline-flex items-center gap-1 text-slate-700 cursor-pointer font-medium">
+                  <input type="radio" name="dailyDirection" value="income" class="text-emerald-600 focus:ring-0" />
+                  <span>🟢 Entrada</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Data -->
+            <div class="sm:col-span-2">
+              <label class="block font-bold text-slate-700 mb-1">Data *</label>
+              <input type="date" id="dailyDate" required class="w-full border border-sky-200 rounded-xl px-2.5 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-sky-400" />
+            </div>
+
+            <!-- Descrição -->
+            <div class="sm:col-span-7">
+              <label class="block font-bold text-slate-700 mb-1">Descrição do Gasto *</label>
+              <input type="text" id="dailyDesc" placeholder="Ex: Mercado Prezunic, Padaria, Farmácia, Combustível..." required class="w-full border border-sky-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-sky-400" />
+            </div>
+
+            <!-- Categoria -->
+            <div class="sm:col-span-3">
+              <div class="flex items-center justify-between mb-1">
+                <label class="block font-bold text-slate-700">Categoria</label>
+                <button type="button" onclick="promptAddNewCategory('dailyCategory')" class="text-[11px] text-sky-600 hover:text-sky-800 font-semibold underline">+ Nova Categoria</button>
+              </div>
+              <select id="dailyCategory" onchange="handleCategorySelectChange(this)" class="w-full border border-sky-200 rounded-xl px-2.5 py-2 text-xs font-medium text-slate-800 bg-white">
+                <option value="Mercado & Hortifruti">Mercado & Hortifruti</option>
+                <option value="Lanches & Restaurantes">Lanches & Restaurantes</option>
+                <option value="Uber & Transporte">Uber & Transporte</option>
+                <option value="Saúde, Farmácia & Academia">Saúde & Farmácia</option>
+                <option value="Casa, Serviços & Outros">Casa & Serviços</option>
+                <option value="Auto Escola & Detran">Auto Escola & Detran</option>
+                <option value="Outros" selected>Outros</option>
+                <option value="__NEW__">➕ Criar Nova Categoria...</option>
+              </select>
+            </div>
+
+            <!-- Botão Salvar -->
+            <div class="sm:col-span-2 flex items-end">
+              <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-xl shadow-sm transition flex items-center justify-center gap-1">
+                <span>💾</span>
+                <span>Salvar</span>
+              </button>
+            </div>
+          </form>
         </div>
-
-        <!-- Pré-visualização da Foto da Nota Fiscal (quando anexada) -->
-        <div id="receiptPreviewBox" class="hidden mb-4 p-3 bg-indigo-50/50 border border-indigo-200 rounded-xl flex items-center justify-between gap-3">
-          <div class="flex items-center gap-3">
-            <img id="receiptPreviewImg" src="" alt="Nota Fiscal" class="w-14 h-14 object-cover rounded-lg border border-indigo-200 shadow-xs" />
-            <div>
-              <span class="text-xs font-bold text-indigo-950 block">📷 Foto da Nota Fiscal Anexada</span>
-              <span class="text-[10px] text-indigo-700">Esta imagem será guardada com o lançamento diário</span>
-            </div>
-          </div>
-          <button type="button" onclick="removeReceiptPhoto()" class="text-xs text-rose-600 hover:text-rose-800 font-bold px-2 py-1">✕ Remover Foto</button>
-        </div>
-
-        <form id="dailyExpenseForm" onsubmit="saveDailyExpense(event)" class="grid grid-cols-1 sm:grid-cols-12 gap-3.5 text-xs">
-          <!-- Valor -->
-          <div class="sm:col-span-3">
-            <label class="block font-bold text-slate-700 mb-1">Valor (R$) *</label>
-            <input type="number" inputmode="decimal" step="0.01" min="0.01" id="dailyAmount" placeholder="0,00" required class="w-full border border-sky-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-900 focus:outline-none focus:border-sky-400" />
-          </div>
-
-          <!-- Tipo de Transação -->
-          <div class="sm:col-span-3">
-            <label class="block font-bold text-slate-700 mb-1">Forma de Pagamento *</label>
-            <select id="dailyPaymentMethod" onchange="document.getElementById('dailyCardHolderBox').classList.toggle('hidden', this.value !== 'credit_card')" class="w-full border border-sky-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 bg-white focus:outline-none focus:border-sky-400">
-              <option value="pix">💠 PIX</option>
-              <option value="debit_card">💳 Cartão de Débito (Itaú)</option>
-              <option value="credit_card">💳 Cartão de Crédito</option>
-              <option value="cash">💵 Dinheiro Vivo</option>
-              <option value="other">Outros</option>
-            </select>
-          </div>
-
-          <!-- Titular do Cartão (aparece se for crédito) -->
-          <div id="dailyCardHolderBox" class="hidden sm:col-span-2">
-            <label class="block font-bold text-slate-700 mb-1">Titular do Cartão</label>
-            <select id="dailyCardHolder" class="w-full border border-sky-200 rounded-xl px-2.5 py-2 text-xs font-medium text-slate-800 bg-white">
-              <option value="Éveli">Cartão Éveli (5544)</option>
-              <option value="Vital">Cartão Vital</option>
-            </select>
-          </div>
-
-          <!-- Direção: Entrada ou Saída -->
-          <div class="sm:col-span-2">
-            <label class="block font-bold text-slate-700 mb-1">Tipo</label>
-            <div class="flex items-center gap-2 pt-1.5">
-              <label class="inline-flex items-center gap-1 text-slate-700 cursor-pointer font-medium">
-                <input type="radio" name="dailyDirection" value="expense" checked class="text-rose-600 focus:ring-0" />
-                <span>🔴 Saída</span>
-              </label>
-              <label class="inline-flex items-center gap-1 text-slate-700 cursor-pointer font-medium">
-                <input type="radio" name="dailyDirection" value="income" class="text-emerald-600 focus:ring-0" />
-                <span>🟢 Entrada</span>
-              </label>
-            </div>
-          </div>
-
-          <!-- Data -->
-          <div class="sm:col-span-2">
-            <label class="block font-bold text-slate-700 mb-1">Data *</label>
-            <input type="date" id="dailyDate" required class="w-full border border-sky-200 rounded-xl px-2.5 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-sky-400" />
-          </div>
-
-          <!-- Descrição -->
-          <div class="sm:col-span-7">
-            <label class="block font-bold text-slate-700 mb-1">Descrição do Gasto *</label>
-            <input type="text" id="dailyDesc" placeholder="Ex: Mercado Prezunic, Padaria, Farmácia, Combustível..." required class="w-full border border-sky-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-sky-400" />
-          </div>
-
-          <!-- Categoria -->
-          <div class="sm:col-span-3">
-            <div class="flex items-center justify-between mb-1">
-              <label class="block font-bold text-slate-700">Categoria</label>
-              <button type="button" onclick="promptAddNewCategory('dailyCategory')" class="text-[11px] text-sky-600 hover:text-sky-800 font-semibold underline">+ Nova Categoria</button>
-            </div>
-            <select id="dailyCategory" onchange="handleCategorySelectChange(this)" class="w-full border border-sky-200 rounded-xl px-2.5 py-2 text-xs font-medium text-slate-800 bg-white">
-              <option value="Mercado & Hortifruti">Mercado & Hortifruti</option>
-              <option value="Lanches & Restaurantes">Lanches & Restaurantes</option>
-              <option value="Uber & Transporte">Uber & Transporte</option>
-              <option value="Saúde, Farmácia & Academia">Saúde & Farmácia</option>
-              <option value="Casa, Serviços & Outros">Casa & Serviços</option>
-              <option value="Auto Escola & Detran">Auto Escola & Detran</option>
-              <option value="Outros" selected>Outros</option>
-              <option value="__NEW__">➕ Criar Nova Categoria...</option>
-            </select>
-          </div>
-
-          <!-- Botão Salvar -->
-          <div class="sm:col-span-2 flex items-end">
-            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-xl shadow-sm transition flex items-center justify-center gap-1">
-              <span>💾</span>
-              <span>Salvar</span>
-            </button>
-          </div>
-        </form>
       </section>
 
       <!-- Lista de Gastos Diários do Mês -->
@@ -955,28 +1023,45 @@
             </div>
           </div>
 
-          <div class="bg-sky-50/60 p-4 rounded-2xl border border-sky-200/70 mb-5">
-            <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
-              <div class="sm:col-span-4">
-                <label class="block text-[11px] font-medium text-sky-900 mb-1">Nome da Meta</label>
-                <input id="goalNameInput" type="text" placeholder="Ex: Viagem, Reforma, Carro..." class="w-full text-xs border border-sky-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:border-sky-400" />
+          <!-- Formulário de Nova Meta (Recolhível por toque na faixa) -->
+          <div class="bg-sky-50/60 rounded-2xl border border-sky-200/70 mb-5 overflow-hidden">
+            <button 
+              type="button" 
+              onclick="toggleCollapsibleCard('newGoalFormContainer', 'newGoalFormChevron', 'goals_form')"
+              class="w-full flex items-center justify-between p-3.5 text-left hover:bg-sky-100/50 collapsible-faixa select-none transition"
+            >
+              <span class="text-xs font-bold text-sky-900 flex items-center gap-1.5">
+                <span>➕</span>
+                <span>Cadastrar Nova Meta da Família</span>
+              </span>
+              <div class="flex items-center gap-2">
+                <span class="text-[10px] font-semibold text-sky-700 hidden sm:inline-block">Toque para abrir</span>
+                <span id="newGoalFormChevron" class="text-xs text-sky-700 font-bold bg-white w-5 h-5 rounded-full flex items-center justify-center">▼</span>
               </div>
-              <div class="sm:col-span-3">
-                <label class="block text-[11px] font-medium text-sky-900 mb-1">Valor Alvo (R$)</label>
-                <input id="goalTotalInput" type="number" inputmode="decimal" step="10" min="1" placeholder="Ex: 5000" class="w-full text-xs border border-sky-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:border-sky-400" />
-              </div>
-              <div class="sm:col-span-2">
-                <label class="block text-[11px] font-medium text-sky-900 mb-1">Já Guardado (R$)</label>
-                <input id="goalSavedInput" type="number" inputmode="decimal" step="10" min="0" placeholder="0,00" class="w-full text-xs border border-sky-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:border-sky-400" />
-              </div>
-              <div class="sm:col-span-1">
-                <label class="block text-[11px] font-medium text-sky-900 mb-1">Meses</label>
-                <input id="goalMonthsInput" type="number" min="1" max="120" value="6" class="w-full text-xs border border-sky-200 rounded-xl px-2 py-2 bg-white focus:outline-none focus:border-sky-400 text-center" />
-              </div>
-              <div class="sm:col-span-2 flex items-end">
-                <button onclick="addFutureGoal()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs py-2 px-3 rounded-xl shadow-sm transition">
-                  + Criar Meta
-                </button>
+            </button>
+            <div id="newGoalFormContainer" class="hidden p-4 pt-1 border-t border-sky-200/50">
+              <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                <div class="sm:col-span-4">
+                  <label class="block text-[11px] font-medium text-sky-900 mb-1">Nome da Meta</label>
+                  <input id="goalNameInput" type="text" placeholder="Ex: Viagem, Reforma, Carro..." class="w-full text-xs border border-sky-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:border-sky-400" />
+                </div>
+                <div class="sm:col-span-3">
+                  <label class="block text-[11px] font-medium text-sky-900 mb-1">Valor Alvo (R$)</label>
+                  <input id="goalTotalInput" type="number" inputmode="decimal" step="10" min="1" placeholder="Ex: 5000" class="w-full text-xs border border-sky-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:border-sky-400" />
+                </div>
+                <div class="sm:col-span-2">
+                  <label class="block text-[11px] font-medium text-sky-900 mb-1">Já Guardado (R$)</label>
+                  <input id="goalSavedInput" type="number" inputmode="decimal" step="10" min="0" placeholder="0,00" class="w-full text-xs border border-sky-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:border-sky-400" />
+                </div>
+                <div class="sm:col-span-1">
+                  <label class="block text-[11px] font-medium text-sky-900 mb-1">Meses</label>
+                  <input id="goalMonthsInput" type="number" min="1" max="120" value="6" class="w-full text-xs border border-sky-200 rounded-xl px-2 py-2 bg-white focus:outline-none focus:border-sky-400 text-center" />
+                </div>
+                <div class="sm:col-span-2 flex items-end">
+                  <button onclick="addFutureGoal()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs py-2 px-3 rounded-xl shadow-sm transition">
+                    + Criar Meta
+                  </button>
+                </div>
               </div>
             </div>
           </div>
