@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="Finanças" />
   <meta name="format-detection" content="telephone=no" />
   <!-- Segurança: Política de Conteúdo (CSP) limita de onde o app pode carregar scripts e para onde pode enviar dados -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; script-src 'self' file: 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' file: 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; worker-src 'self' blob: https://cdnjs.cloudflare.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdnjs.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; script-src 'self' file: 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' file: 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; worker-src 'self' blob: https://cdnjs.cloudflare.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://accounts.google.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; object-src 'none'; base-uri 'self'" />
   <meta name="referrer" content="no-referrer" />
   <link rel="manifest" href="manifest.json" />
   <title>Central Financeira do Casal — Éveli & Vital</title>
@@ -91,7 +91,7 @@
       </div>
 
       <!-- 3. Formulário Principal -->
-      <form onsubmit="submitAppLogin(event)" class="space-y-3.5">
+      <form onsubmit="submitAppLogin(event)" novalidate class="space-y-3.5">
         <!-- Campo de Nome (Exibido apenas na aba Criar Conta) -->
         <div id="loginNameField" class="hidden">
           <label class="block text-xs font-semibold text-slate-300 mb-1">Seu Nome</label>
@@ -165,7 +165,6 @@
               placeholder="Digite sua senha..."
               oninput="updatePasswordStrengthUI(this.value)"
               class="w-full bg-slate-950/70 border border-slate-700 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20 rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm text-white placeholder-slate-500 outline-none transition pr-10"
-              required
             />
             <button
               type="button"
@@ -1931,16 +1930,16 @@
   <!-- =================================================================== -->
   <!-- MÓDULOS JAVASCRIPT SEPARADOS POR RESPONSABILIDADE (ETAPAS 2, 3 E 4) -->
   <!-- =================================================================== -->
-  <script src="js/utils.js"></script>
-  <script src="js/data-seed.js"></script>
-  <script src="js/state.js"></script>
-  <script src="js/finance-engine.js"></script>
-  <script src="js/financial-ai.js"></script>
-  <script src="js/importer-backup.js"></script>
-  <script src="js/supabase-config.js"></script>
-  <script src="js/supabase-sync.js"></script>
-  <script src="js/actions.js"></script>
-  <script src="js/auth-guard.js"></script>
-  <script src="js/ui-render.js"></script>
+  <script src="js/utils.js?v=3"></script>
+  <script src="js/data-seed.js?v=3"></script>
+  <script src="js/state.js?v=3"></script>
+  <script src="js/finance-engine.js?v=3"></script>
+  <script src="js/financial-ai.js?v=3"></script>
+  <script src="js/importer-backup.js?v=3"></script>
+  <script src="js/supabase-config.js?v=3"></script>
+  <script src="js/supabase-sync.js?v=3"></script>
+  <script src="js/actions.js?v=3"></script>
+  <script src="js/auth-guard.js?v=3"></script>
+  <script src="js/ui-render.js?v=3"></script>
 </body>
 </html>

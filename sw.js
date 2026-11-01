@@ -4,7 +4,7 @@
 // Permite que o navegador reconheça o sistema como um aplicativo instalável
 // e mantenha os arquivos essenciais em cache para abertura rápida.
 
-const CACHE_NAME = 'financas-casal-v2';
+const CACHE_NAME = 'financas-casal-v3';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -51,7 +51,7 @@ self.addEventListener('fetch', event => {
   if (url.origin !== self.location.origin) return;
 
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { cache: 'no-cache' })
       .then(response => {
         if (response && response.ok) {
           const clone = response.clone();

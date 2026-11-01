@@ -1555,7 +1555,9 @@ if (typeof window !== 'undefined') {
     }
     renderAll();
     if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.protocol === 'http:')) {
-      navigator.serviceWorker.register('./sw.js').catch(() => {});
+      navigator.serviceWorker.register('./sw.js').then(reg => {
+        if (reg && typeof reg.update === 'function') reg.update().catch(() => {});
+      }).catch(() => {});
     }
   });
 

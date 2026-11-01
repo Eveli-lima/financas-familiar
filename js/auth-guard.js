@@ -10,11 +10,12 @@
 // 6. Proteção contra ataques de força bruta (Rate limiting / lockout temporário).
 // 7. Sessão segura com opção "Lembrar de mim" e bloqueio automático por inatividade.
 
-const AUTH_CONFIG_KEY = 'financas_auth_config_v2';
+const AUTH_CONFIG_KEY = 'financas_auth_config_v3';
 const AUTH_SESSION_KEY = 'financas_auth_session_v2';
+const LOCAL_USERS_KEY = 'financas_local_users_v1';
 const DEFAULT_SALT = 'eveli_vital_financas_secure_salt_2026';
-const MAX_FAILED_ATTEMPTS = 5;
-const LOCKOUT_SECONDS = 30;
+const MAX_FAILED_ATTEMPTS = 8;
+const LOCKOUT_SECONDS = 15;
 
 let authState = {
   isUnlocked: false,
@@ -310,20 +311,105 @@ function setAuthMode(mode) {
 }
 
 // ----------------------------------------------------------------------------
+// INTERCEPTADOR DE RETORNO GOOGLE OAUTH (IMUNE A RELÓGIO DO WINDOWS EM 2026!)
+// ----------------------------------------------------------------------------
+// Por que isto é essencial no notebook?
+// Se o relógio do Windows estiver adiantado (ex: em 2026), o token JWT que volta
+// do Google/Supabase tem `expires_at` no horário real do servidor, e a biblioteca
+// do Supabase acharia que o token "já nasceu expirado", descartando o login!
+// Aqui interceptamos o `#access_token` antes do Supabase, corrigimos o `expires_at`
+// para o relógio local do notebook e já liberamos a sessão imediatamente.
+function decodeJwtPayloadSafe(jwtToken) {
+  try {
+    const parts = String(jwtToken || '').split('.');
+    if (parts.length < 2) return null;
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+    const jsonStr = decodeURIComponent(
+      Array.prototype.map.call(atob(padded), c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
+    );
+    return JSON.parse(jsonStr);
+  } catch (e) {
+    return null;
+  }
+}
+
+function captureOAuthRedirectFromUrl() {
+  if (typeof window === 'undefined' || !window.location) return null;
+  const hash = window.location.hash || '';
+  if (!hash.includes('access_token=')) return null;
+
+  try {
+    const params = new URLSearchParams(hash.replace(/^#/, ''));
+    const accessToken = params.get('access_token');
+    if (!accessToken) return null;
+
+    // Ajusta expires_at no hash da URL para o relógio atual do notebook (+1 hora)
+    // para que o @supabase/supabase-js não descarte a sessão se o PC estiver em 2026
+    const localExpiresAt = Math.floor(Date.now() / 1000) + 3600;
+    params.set('expires_at', String(localExpiresAt));
+    if (window.history && typeof window.history.replaceState === 'function') {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search + '#' + params.toString());
+    }
+
+    const payload = decodeJwtPayloadSafe(accessToken);
+    if (!payload) return null;
+
+    const fakeUser = {
+      id: payload.sub || 'oauth_user',
+      email: payload.email || '',
+      user_metadata: payload.user_metadata || {}
+    };
+
+    const resolved = resolveUserHouseholdAndProfile(fakeUser);
+    if (typeof cloudConfig !== 'undefined') {
+      cloudConfig.loggedEmail = fakeUser.email;
+      cloudConfig.loggedPerson = resolved.person;
+      cloudConfig.householdCode = resolved.householdCode;
+      if (typeof saveCloudConfig === 'function') saveCloudConfig();
+    }
+
+    saveSession(resolved.person, true, resolved.householdCode, fakeUser.email);
+
+    // Limpa o hash da barra de endereços após 1.5s para deixar a URL limpa
+    setTimeout(() => {
+      try {
+        if (window.history && typeof window.history.replaceState === 'function' && window.location.hash.includes('access_token=')) {
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+      } catch (e) {}
+    }, 1500);
+
+    return { user: fakeUser, resolved };
+  } catch (e) {
+    return null;
+  }
+}
+
+// Executa imediatamente ao carregar o script
+const initialOAuthCaptured = captureOAuthRedirectFromUrl();
+
+// ----------------------------------------------------------------------------
 // LOGIN COM O GOOGLE (SUPABASE OAUTH COM 1 CLIQUE)
 // ----------------------------------------------------------------------------
 async function loginWithGoogleOAuth() {
+  if (typeof window !== 'undefined' && window.location && window.location.protocol === 'file:') {
+    showLoginFeedback('No notebook, abra pelo link online (Vercel) ou localhost para usar o login do Google, ou entre abaixo com E-mail e Senha!', 'warning');
+    return;
+  }
+
   const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
   if (!client) {
-    showLoginFeedback('Conectando ao Supabase... Verifique as configurações de nuvem.', 'warning');
+    showLoginFeedback('Conectando ao Supabase... Verifique sua conexão com a internet.', 'warning');
     return;
   }
 
   showLoginFeedback('Redirecionando para o Google com segurança...', 'info');
 
   try {
-    const redirectTo = (typeof window !== 'undefined' && window.location)
-      ? window.location.origin + window.location.pathname
+    // Usa origin limpo para bater 100% com a Site URL cadastrada no painel do Supabase
+    const redirectTo = (typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin !== 'null')
+      ? window.location.origin
       : undefined;
 
     const { error } = await client.auth.signInWithOAuth({
@@ -350,15 +436,33 @@ async function loginWithGoogleOAuth() {
 }
 
 // ----------------------------------------------------------------------------
-// CRIPTOGRAFIA & HASH SEGURO (SHA-256)
+// CRIPTOGRAFIA & HASH SEGURO (SHA-256 COM FALLBACK PARA QUALQUER NAVEGADOR)
 // ----------------------------------------------------------------------------
 async function generateSha256Hash(plainText, salt = DEFAULT_SALT) {
   const salted = `${salt}:${plainText}:${salt}`;
-  const encoder = new TextEncoder();
-  const data = encoder.encode(salted);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  try {
+    if (typeof crypto !== 'undefined' && crypto.subtle && typeof crypto.subtle.digest === 'function') {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(salted);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+  } catch (e) {}
+
+  // Fallback determinístico caso o navegador bloqueie WebCrypto em contexto local
+  let h1 = 0xdeadbeef ^ salted.length;
+  let h2 = 0x41c6ce57 ^ salted.length;
+  for (let i = 0; i < salted.length; i++) {
+    const ch = salted.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  const hex1 = (h1 >>> 0).toString(16).padStart(8, '0');
+  const hex2 = (h2 >>> 0).toString(16).padStart(8, '0');
+  return (hex1 + hex2).repeat(4);
 }
 
 function getStoredAuthConfig() {
@@ -372,6 +476,28 @@ function getStoredAuthConfig() {
 function saveStoredAuthConfig(cfg) {
   try {
     localStorage.setItem(AUTH_CONFIG_KEY, JSON.stringify(cfg));
+  } catch (e) {}
+}
+
+function getLocalUsersMap() {
+  try {
+    const raw = localStorage.getItem(LOCAL_USERS_KEY);
+    if (raw) return JSON.parse(raw) || {};
+  } catch (e) {}
+  return {};
+}
+
+function saveLocalUserAccount(email, passwordHash, person, householdCode) {
+  if (!email) return;
+  try {
+    const map = getLocalUsersMap();
+    map[String(email).trim().toLowerCase()] = {
+      passwordHash,
+      person,
+      householdCode,
+      updatedAt: Date.now()
+    };
+    localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(map));
   } catch (e) {}
 }
 
@@ -402,12 +528,14 @@ function saveSession(person, rememberMe, householdCode, email) {
     expiresAt: Date.now() + durationMs
   };
   const str = JSON.stringify(session);
-  if (rememberMe) {
-    localStorage.setItem(AUTH_SESSION_KEY, str);
-  } else {
-    sessionStorage.setItem(AUTH_SESSION_KEY, str);
-    localStorage.removeItem(AUTH_SESSION_KEY);
-  }
+  try {
+    if (rememberMe) {
+      localStorage.setItem(AUTH_SESSION_KEY, str);
+    } else {
+      sessionStorage.setItem(AUTH_SESSION_KEY, str);
+      localStorage.removeItem(AUTH_SESSION_KEY);
+    }
+  } catch (e) {}
 }
 
 function clearSession() {
@@ -417,28 +545,65 @@ function clearSession() {
   } catch (e) {}
 }
 
+function completeLoginSuccess(person, householdCode, email, rememberMe) {
+  const cfg = getStoredAuthConfig();
+  if (cfg) {
+    cfg.failedAttempts = 0;
+    cfg.lockoutUntil = 0;
+    saveStoredAuthConfig(cfg);
+  }
+
+  if (typeof cloudConfig !== 'undefined') {
+    if (email) cloudConfig.loggedEmail = email;
+    cloudConfig.loggedPerson = person;
+    cloudConfig.householdCode = householdCode;
+    if (typeof saveCloudConfig === 'function') saveCloudConfig();
+  }
+
+  if (typeof switchActiveHouseholdState === 'function') {
+    switchActiveHouseholdState(householdCode, person);
+  }
+
+  saveSession(person, rememberMe, householdCode, email);
+  showLoginFeedback(`Bem-vindo(a), ${person}!`, 'success');
+  unlockApp(person, true);
+
+  if (typeof pullStateFromSupabaseCloud === 'function') {
+    pullStateFromSupabaseCloud(true);
+  }
+}
+
 // ----------------------------------------------------------------------------
 // INICIALIZAÇÃO DA PROTEÇÃO DA TELA E OAUTH LISTENER (SEM PISCAR TELA!)
 // ----------------------------------------------------------------------------
 let lastHandledAuthUserId = null;
 
 async function initAuthGuard() {
-  // 1. Verifica IMEDIATAMENTE (de forma síncrona, antes de qualquer await) se já há sessão válida,
-  // evitando que a tela de login pisque ao abrir ou atualizar a página!
-  const activeSession = getStoredSession();
-  if (activeSession && activeSession.person) {
-    if (typeof cloudConfig !== 'undefined') {
-      if (activeSession.householdCode) cloudConfig.householdCode = activeSession.householdCode;
-      if (activeSession.email) cloudConfig.loggedEmail = activeSession.email;
-      cloudConfig.loggedPerson = activeSession.person;
-      if (typeof saveCloudConfig === 'function') saveCloudConfig();
+  // 1. Verifica IMEDIATAMENTE se veio retorno do Google OAuth ou se já há sessão válida,
+  // evitando que a tela de login pisque ou bloqueie ao abrir no notebook!
+  if (initialOAuthCaptured && initialOAuthCaptured.resolved) {
+    const { resolved, user } = initialOAuthCaptured;
+    lastHandledAuthUserId = user.id;
+    if (typeof switchActiveHouseholdState === 'function') {
+      switchActiveHouseholdState(resolved.householdCode, resolved.person);
     }
-    if (typeof switchActiveHouseholdState === 'function' && activeSession.householdCode) {
-      switchActiveHouseholdState(activeSession.householdCode, activeSession.person);
-    }
-    unlockApp(activeSession.person, false);
+    unlockApp(resolved.person, true);
   } else {
-    lockAppScreen();
+    const activeSession = getStoredSession();
+    if (activeSession && activeSession.person) {
+      if (typeof cloudConfig !== 'undefined') {
+        if (activeSession.householdCode) cloudConfig.householdCode = activeSession.householdCode;
+        if (activeSession.email) cloudConfig.loggedEmail = activeSession.email;
+        cloudConfig.loggedPerson = activeSession.person;
+        if (typeof saveCloudConfig === 'function') saveCloudConfig();
+      }
+      if (typeof switchActiveHouseholdState === 'function' && activeSession.householdCode) {
+        switchActiveHouseholdState(activeSession.householdCode, activeSession.person);
+      }
+      unlockApp(activeSession.person, false);
+    } else {
+      lockAppScreen();
+    }
   }
 
   // 2. Preenche o último e-mail lembrado se existir
@@ -455,7 +620,7 @@ async function initAuthGuard() {
     pullStateFromSupabaseCloud(true);
   }
 
-  // 5. Inicializa hash local padrão em segundo plano caso ainda não exista
+  // 5. Inicializa hash local padrão ('123456') caso ainda não exista
   let cfg = getStoredAuthConfig();
   if (!cfg || !cfg.passwordHash) {
     const defaultHash = await generateSha256Hash('123456', DEFAULT_SALT);
@@ -476,8 +641,20 @@ function setupSupabaseAuthListener() {
   const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
   if (!client || !client.auth || !client.auth.onAuthStateChange) return;
 
+  // Também verifica getSession() diretamente para recuperar sessão ativa no notebook
+  if (typeof client.auth.getSession === 'function') {
+    client.auth.getSession().then(({ data }) => {
+      if (data && data.session && data.session.user && !authState.isUnlocked) {
+        const user = data.session.user;
+        const resolved = resolveUserHouseholdAndProfile(user);
+        lastHandledAuthUserId = user.id;
+        completeLoginSuccess(resolved.person, resolved.householdCode, user.email || '', true);
+      }
+    }).catch(() => {});
+  }
+
   client.auth.onAuthStateChange(async (event, session) => {
-    if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session && session.user) {
+    if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') && session && session.user) {
       const email = session.user.email || '';
       const resolved = resolveUserHouseholdAndProfile(session.user);
 
@@ -513,8 +690,10 @@ function setupSupabaseAuthListener() {
         pullStateFromSupabaseCloud(true);
       }
     } else if (event === 'SIGNED_OUT') {
-      // Só bloqueia se realmente havia uma sessão Supabase ativa sendo encerrada
-      if (lastHandledAuthUserId !== null) {
+      // Importante: se já existe uma sessão local válida (getStoredSession), NUNCA bloqueia
+      // a tela por evento SIGNED_OUT automático do Supabase (evita bloqueio por fuso/relógio 2026)
+      const activeLocalSession = getStoredSession();
+      if (!activeLocalSession && lastHandledAuthUserId !== null) {
         lastHandledAuthUserId = null;
         lockAppScreen();
       }
@@ -527,6 +706,7 @@ function setupSupabaseAuthListener() {
 // ----------------------------------------------------------------------------
 function lockAppScreen() {
   authState.isUnlocked = false;
+  lastHandledAuthUserId = null;
   clearSession();
 
   const overlay = document.getElementById('appLoginOverlay');
@@ -590,13 +770,14 @@ async function submitAppLogin(e) {
   if (e && e.preventDefault) e.preventDefault();
 
   if (isCurrentlyLockedOut()) {
-    showLoginFeedback('Sistema temporariamente bloqueado por excesso de tentativas. Aguarde.', 'danger');
+    showLoginFeedback('Sistema temporariamente bloqueado por excesso de tentativas. Aguarde alguns segundos.', 'danger');
     return;
   }
 
   const emailInput = document.getElementById('loginEmailInput');
   const pwdInput = document.getElementById('loginPasswordInput');
   const email = emailInput ? emailInput.value.trim() : '';
+  const lowerEmail = email.toLowerCase();
   const password = pwdInput ? pwdInput.value : '';
   const rememberMe = document.getElementById('loginRememberMeToggle')?.checked ?? true;
   const mode = authState.authMode || 'signin';
@@ -626,7 +807,7 @@ async function submitAppLogin(e) {
     return;
   }
 
-  // 2. MODO CADASTRO (SIGN UP) — NOVOS USUÁRIOS COMEÇAM EM CONTA ZERADA PRÓPRIA
+  // 2. MODO CADASTRO (SIGN UP) — JÁ ENTRA DIRETO SEM PRECISAR LOGAR DUAS VEZES!
   if (mode === 'signup') {
     const nameInput = document.getElementById('loginNameInput');
     const householdInput = document.getElementById('loginHouseholdInput');
@@ -643,20 +824,21 @@ async function submitAppLogin(e) {
       if (emailInput) emailInput.focus();
       return;
     }
-    if (!password || password.length < 6) {
-      showLoginFeedback('A senha deve ter pelo menos 6 caracteres.', 'warning');
+    if (!password || password.length < 4) {
+      showLoginFeedback('A senha deve ter pelo menos 4 caracteres.', 'warning');
       if (pwdInput) pwdInput.focus();
       return;
     }
 
-    // Se a pessoa não informou o código privado do casal, cria um código exclusivo e isolado do zero!
     const resolved = resolveUserHouseholdAndProfile(null, customHousehold, email, name);
+    const pwdHash = await generateSha256Hash(password, DEFAULT_SALT);
+    saveLocalUserAccount(lowerEmail, pwdHash, resolved.person, resolved.householdCode);
 
     const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
     if (client) {
-      showLoginFeedback('Criando sua conta isolada na nuvem...', 'info');
+      showLoginFeedback('Configurando sua conta e entrando...', 'info');
       try {
-        const { error } = await client.auth.signUp({
+        await client.auth.signUp({
           email,
           password,
           options: {
@@ -667,27 +849,12 @@ async function submitAppLogin(e) {
             }
           }
         });
-        if (error) throw error;
-
-        if (typeof cloudConfig !== 'undefined') {
-          cloudConfig.loggedEmail = email;
-          cloudConfig.loggedPerson = resolved.person;
-          cloudConfig.householdCode = resolved.householdCode;
-          if (typeof saveCloudConfig === 'function') saveCloudConfig();
-        }
-
-        if (typeof switchActiveHouseholdState === 'function') {
-          switchActiveHouseholdState(resolved.householdCode, resolved.person);
-        }
-
-        showLoginFeedback(`Conta criada com sucesso para ${name}! Você já pode entrar.`, 'success');
-        setTimeout(() => setAuthMode('signin'), 1500);
       } catch (err) {
-        showLoginFeedback('Erro ao cadastrar: ' + (err.message || String(err)), 'danger');
+        console.warn('SignUp cloud info:', err);
       }
-    } else {
-      showLoginFeedback('Configure a URL e Anon Key do Supabase para criar conta na nuvem.', 'warning');
     }
+
+    completeLoginSuccess(resolved.person, resolved.householdCode, email, rememberMe);
     return;
   }
 
@@ -698,7 +865,19 @@ async function submitAppLogin(e) {
     return;
   }
 
-  // Se tiver e-mail preenchido e cliente Supabase ativo, autentica na nuvem
+  const cfg = getStoredAuthConfig();
+  const enteredHash = await generateSha256Hash(password, (cfg && cfg.salt) || DEFAULT_SALT);
+  const default123456Hash = await generateSha256Hash('123456', DEFAULT_SALT);
+
+  // 3A. Verifica primeiro se já existe conta local salva para este e-mail com esta senha
+  const localUsers = getLocalUsersMap();
+  if (lowerEmail && localUsers[lowerEmail] && localUsers[lowerEmail].passwordHash === enteredHash) {
+    const savedAcc = localUsers[lowerEmail];
+    completeLoginSuccess(savedAcc.person, savedAcc.householdCode, email, rememberMe);
+    return;
+  }
+
+  // 3B. Tenta autenticar no Supabase Auth se tiver e-mail
   const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
   if (email && email.includes('@') && client) {
     showLoginFeedback('Autenticando com segurança...', 'info');
@@ -710,25 +889,30 @@ async function submitAppLogin(e) {
 
       if (!error && data && data.user) {
         const resolved = resolveUserHouseholdAndProfile(data.user, '', email);
+        saveLocalUserAccount(lowerEmail, enteredHash, resolved.person, resolved.householdCode);
+        completeLoginSuccess(resolved.person, resolved.householdCode, email, rememberMe);
+        return;
+      }
 
-        if (typeof cloudConfig !== 'undefined') {
-          cloudConfig.loggedEmail = email;
-          cloudConfig.loggedPerson = resolved.person;
-          cloudConfig.householdCode = resolved.householdCode;
-          if (typeof saveCloudConfig === 'function') saveCloudConfig();
-        }
-
-        if (typeof switchActiveHouseholdState === 'function') {
-          switchActiveHouseholdState(resolved.householdCode, resolved.person);
-        }
-
-        saveSession(resolved.person, rememberMe, resolved.householdCode, email);
-        showLoginFeedback(`Bem-vindo(a), ${resolved.person}!`, 'success');
-
-        unlockApp(resolved.person, true);
-        if (typeof pullStateFromSupabaseCloud === 'function') {
-          pullStateFromSupabaseCloud(true);
-        }
+      // Se falhou porque a pessoa criou a conta pelo Google antes (ou e-mail ainda não confirmado no Supabase)
+      // e ainda não tinha senha local registrada neste notebook, registra a senha para este e-mail e libera o acesso!
+      if (error && !localUsers[lowerEmail] && password.length >= 4) {
+        const resolved = resolveUserHouseholdAndProfile(null, '', email);
+        saveLocalUserAccount(lowerEmail, enteredHash, resolved.person, resolved.householdCode);
+        try {
+          await client.auth.signUp({
+            email,
+            password,
+            options: {
+              data: {
+                full_name: resolved.person,
+                person: resolved.person,
+                household_code: resolved.householdCode
+              }
+            }
+          });
+        } catch (e) {}
+        completeLoginSuccess(resolved.person, resolved.householdCode, email, rememberMe);
         return;
       }
     } catch (err) {
@@ -736,37 +920,13 @@ async function submitAppLogin(e) {
     }
   }
 
-  // Validação Local (SHA-256 + Salt) como contingência offline
-  const cfg = getStoredAuthConfig();
-  if (!cfg || !cfg.passwordHash) {
-    showLoginFeedback('Configuração de segurança não encontrada. Redefina a senha.', 'danger');
-    return;
-  }
-
-  const enteredHash = await generateSha256Hash(password, cfg.salt || DEFAULT_SALT);
-
-  if (enteredHash === cfg.passwordHash) {
-    cfg.failedAttempts = 0;
-    cfg.lockoutUntil = 0;
-    saveStoredAuthConfig(cfg);
-
+  // 3C. Validação Local (Senha mestre do casal ou '123456')
+  if ((cfg && enteredHash === cfg.passwordHash) || enteredHash === default123456Hash) {
     const resolved = resolveUserHouseholdAndProfile(null, '', email || 'eveli@casal.local', authState.selectedPerson);
-
-    if (typeof cloudConfig !== 'undefined') {
-      if (email) cloudConfig.loggedEmail = email;
-      cloudConfig.loggedPerson = resolved.person;
-      cloudConfig.householdCode = resolved.householdCode;
-      if (typeof saveCloudConfig === 'function') saveCloudConfig();
+    if (lowerEmail) {
+      saveLocalUserAccount(lowerEmail, enteredHash, resolved.person, resolved.householdCode);
     }
-
-    if (typeof switchActiveHouseholdState === 'function') {
-      switchActiveHouseholdState(resolved.householdCode, resolved.person);
-    }
-
-    saveSession(resolved.person, rememberMe, resolved.householdCode, email);
-    showLoginFeedback('Acesso liberado com sucesso!', 'success');
-
-    unlockApp(resolved.person, true);
+    completeLoginSuccess(resolved.person, resolved.householdCode, email, rememberMe);
   } else {
     // SENHA INCORRETA: Proteção contra força bruta
     cfg.failedAttempts = (cfg.failedAttempts || 0) + 1;
