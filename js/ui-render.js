@@ -856,8 +856,12 @@ function renderAll() {
               <strong class="${isInc ? 'text-emerald-600' : 'text-slate-900'} font-semibold">
                 ${isInc ? '+' : '-'} ${formatBRL(t.amount)}
               </strong>
-              <button onclick="openEditTxModal('${t.id}')" class="text-sky-600 hover:text-sky-800 px-1" title="Editar lançamento">✎</button>
-              <button onclick="deleteTransaction('${t.id}')" class="text-slate-300 hover:text-rose-600 px-1" title="Excluir lançamento">✕</button>
+              ${(typeof isTransactionProtected === 'function' && isTransactionProtected(t)) ? `
+                <span class="text-[11px] text-slate-400 px-1.5 select-none" title="Registro oficial de extrato ou mês anterior (protegido contra alteração pela interface)">🔒</span>
+              ` : `
+                <button onclick="openEditTxModal('${t.id}')" class="text-sky-600 hover:text-sky-800 px-1" title="Editar lançamento manual">✎</button>
+                <button onclick="deleteTransaction('${t.id}')" class="text-slate-300 hover:text-rose-600 px-1" title="Excluir lançamento manual">✕</button>
+              `}
             </div>
           </div>
         `;
@@ -922,8 +926,12 @@ function renderAll() {
               <strong class="text-slate-900 font-semibold">
                 - ${formatBRL(t.amount)}
               </strong>
-              <button onclick="openEditTxModal('${t.id}')" class="text-sky-600 hover:text-sky-800 px-1" title="Editar compra">✎</button>
-              <button onclick="deleteTransaction('${t.id}')" class="text-slate-300 hover:text-rose-600 px-1" title="Excluir compra">✕</button>
+              ${(typeof isTransactionProtected === 'function' && isTransactionProtected(t)) ? `
+                <span class="text-[11px] text-slate-400 px-1.5 select-none" title="Compra oficial de fatura ou mês anterior (protegida contra alteração pela interface)">🔒</span>
+              ` : `
+                <button onclick="openEditTxModal('${t.id}')" class="text-sky-600 hover:text-sky-800 px-1" title="Editar compra manual">✎</button>
+                <button onclick="deleteTransaction('${t.id}')" class="text-slate-300 hover:text-rose-600 px-1" title="Excluir compra manual">✕</button>
+              `}
             </div>
           </div>
         `;
@@ -989,8 +997,12 @@ function renderAll() {
             <strong class="${isInc ? 'text-emerald-600' : 'text-slate-900'} font-semibold">
               ${isInc ? '+' : '-'} ${formatBRL(t.amount)}
             </strong>
-            <button onclick="openEditTxModal('${t.id}')" class="text-sky-600 hover:text-sky-800 px-1" title="Editar lançamento">✎</button>
-            <button onclick="deleteTransaction('${t.id}')" class="text-slate-300 hover:text-rose-600 px-1" title="Excluir lançamento">✕</button>
+            ${(typeof isTransactionProtected === 'function' && isTransactionProtected(t)) ? `
+              <span class="text-[11px] text-slate-400 px-1.5 select-none" title="Registro oficial ou mês anterior (protegido)">🔒</span>
+            ` : `
+              <button onclick="openEditTxModal('${t.id}')" class="text-sky-600 hover:text-sky-800 px-1" title="Editar lançamento manual">✎</button>
+              <button onclick="deleteTransaction('${t.id}')" class="text-slate-300 hover:text-rose-600 px-1" title="Excluir lançamento manual">✕</button>
+            `}
           </div>
         </div>
       `;

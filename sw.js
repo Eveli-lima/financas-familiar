@@ -4,7 +4,7 @@
 // Permite que o navegador reconheça o sistema como um aplicativo instalável
 // e mantenha os arquivos essenciais em cache para abertura rápida.
 
-const CACHE_NAME = 'financas-casal-v1';
+const CACHE_NAME = 'financas-casal-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -13,10 +13,15 @@ const ASSETS_TO_CACHE = [
   './js/data-seed.js',
   './js/state.js',
   './js/finance-engine.js',
+  './js/financial-ai.js',
   './js/importer-backup.js',
-  './js/actions.js',
+  './js/supabase-config.js',
   './js/supabase-sync.js',
+  './js/actions.js',
+  './js/auth-guard.js',
   './js/ui-render.js',
+  './js/pdf.min.js',
+  './js/pdf.worker.min.js',
   './manifest.json'
 ];
 

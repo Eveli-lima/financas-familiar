@@ -61,20 +61,21 @@ function getLoggedPerson() {
 }
 
 function setLoggedPerson(personName) {
-  if (personName !== 'Éveli' && personName !== 'Vital' && personName !== 'Marido') return;
-  cloudConfig.loggedPerson = personName === 'Marido' ? 'Vital' : personName;
+  if (!personName) return;
+  const cleanName = personName === 'Marido' ? 'Vital' : String(personName).trim();
+  cloudConfig.loggedPerson = cleanName;
   saveCloudConfig();
 
   // Ajusta o campo padrão do formulário de novo lançamento para quem está logado
   const ownerInput = typeof document !== 'undefined' ? document.getElementById('txOwnerInput') : null;
   if (ownerInput) {
-    ownerInput.value = personName;
+    ownerInput.value = (cleanName === 'Vital' || cleanName === 'Éveli') ? cleanName : 'Éveli';
     if (typeof syncAccountDefaultByOwner === 'function') {
       syncAccountDefaultByOwner();
     }
   }
 
-  recordAuditLog('Troca de Perfil Ativo', `Sessão ativa alterada para ${personName}`);
+  recordAuditLog('Troca de Perfil Ativo', `Sessão ativa alterada para ${cleanName}`);
   updateAuthHeaderUI();
 }
 
@@ -136,6 +137,14 @@ function updateAuthHeaderUI() {
   const authUserBadge = document.getElementById('headerAuthUserBadge');
   if (authUserBadge) {
     authUserBadge.textContent = `Bloquear (${getLoggedPerson()})`;
+  }
+
+  const headerSubtitle = document.getElementById('headerSubtitleText');
+  if (headerSubtitle) {
+    const coupleMode = typeof isCoupleHousehold === 'function' ? isCoupleHousehold(cloudConfig.householdCode) : true;
+    headerSubtitle.textContent = coupleMode
+      ? 'Éveli & Vital • Itaú + Poupança + 2 Cartões'
+      : `${getLoggedPerson()} • Gestão Financeira Pessoal & Familiar`;
   }
 
   const syncDot = document.getElementById('cloudSyncStatusDot');
@@ -368,19 +377,50 @@ async function pushStateToSupabaseCloud(silent) {
   }
 }
 
-// Aplica no app os dados recebidos da nuvem
+// Aplica no app os dados recebidos da nuvem (com mesclagem protetora de documentos e meses anteriores)
 function applyIncomingState(incomingJson, updatedBy) {
   if (!incomingJson) return;
   try {
     const incoming = sanitizeState(incomingJson);
+
+    // Garante que nenhum documento oficial (.OFX / .PDF) ou registro de mês anterior já salvo localmente seja perdido na sincronização
+    const localProtectedTx = (state && Array.isArray(state.transactions))
+      ? state.transactions.filter(t => !t.isAutoProjected && typeof isTransactionProtected === 'function' && isTransactionProtected(t))
+      : [];
+    const incomingTxIds = new Set((incoming.transactions || []).map(t => t.id));
+    localProtectedTx.forEach(pt => {
+      if (!incomingTxIds.has(pt.id)) {
+        incoming.transactions.push(pt);
+        incomingTxIds.add(pt.id);
+      }
+    });
+
+    const localProtectedFiles = (state && Array.isArray(state.uploadedFiles))
+      ? state.uploadedFiles.filter(f => typeof isUploadedFileProtected === 'function' && isUploadedFileProtected(f))
+      : [];
+    const incomingFileIds = new Set((incoming.uploadedFiles || []).map(f => f.id));
+    localProtectedFiles.forEach(pf => {
+      if (!incomingFileIds.has(pf.id)) {
+        incoming.uploadedFiles.push(pf);
+        incomingFileIds.add(pf.id);
+      }
+    });
+
+    const baseData = typeof getBaseDataForHousehold === 'function'
+      ? getBaseDataForHousehold(cloudConfig.householdCode, getLoggedPerson())
+      : getInitialFamilyData();
+
     state = {
-      ...getInitialFamilyData(),
+      ...baseData,
       ...incoming,
       transactions: enrichTransactionsAndProjectInstallments(incoming.transactions || [])
     };
 
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      try {
+        const storageKey = typeof getActiveStorageKey === 'function' ? getActiveStorageKey() : STORAGE_KEY;
+        localStorage.setItem(storageKey, JSON.stringify(state));
+      } catch (e) {}
     }
 
     const now = new Date();
@@ -392,6 +432,8 @@ function applyIncomingState(incomingJson, updatedBy) {
     console.error('Erro ao aplicar dados recebidos da nuvem:', err);
   }
 }
+
+let lastAutoPullTimestamp = 0;
 
 // Baixa os dados mais recentes da família salvos na nuvem do Supabase
 async function pullStateFromSupabaseCloud(silent) {
@@ -407,6 +449,7 @@ async function pullStateFromSupabaseCloud(silent) {
   }
 
   try {
+    lastAutoPullTimestamp = Date.now();
     const householdCode = cloudConfig.householdCode || 'casal_eveli_vital';
     const { data, error } = await client
       .from('household_state_sync')
@@ -416,6 +459,13 @@ async function pullStateFromSupabaseCloud(silent) {
 
     if (error) throw error;
     if (!data || !data.state_json) {
+      // Se for uma nova conta de outra pessoa/família que ainda não possui dados na nuvem,
+      // garante que ela inicie 100% do zero (sem herdar dados do casal)
+      if (typeof isCoupleHousehold === 'function' && !isCoupleHousehold(householdCode)) {
+        if (typeof switchActiveHouseholdState === 'function') {
+          switchActiveHouseholdState(householdCode, getLoggedPerson());
+        }
+      }
       if (!silent && feedbackEl) {
         feedbackEl.className = 'text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-2.5 mt-2';
         feedbackEl.textContent = 'Ainda não há dados salvos na nuvem para este código de família. Clique primeiro em "Enviar p/ Nuvem".';
@@ -485,16 +535,27 @@ function scheduleCloudAutoSync() {
   }, 1500);
 }
 
-// Sincroniza automaticamente quando o usuário volta para a aba do navegador
+// Sincroniza automaticamente quando o usuário volta para a aba do navegador (com intervalo mínimo de 30s para evitar piscar a tela)
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
   window.addEventListener('focus', () => {
-    if (cloudConfig.supabaseUrl && typeof authState !== 'undefined' && authState.isUnlocked) {
+    if (
+      cloudConfig.supabaseUrl &&
+      typeof authState !== 'undefined' &&
+      authState.isUnlocked &&
+      Date.now() - lastAutoPullTimestamp > 30000
+    ) {
       pullStateFromSupabaseCloud(true);
     }
   });
 
   window.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && cloudConfig.supabaseUrl && typeof authState !== 'undefined' && authState.isUnlocked) {
+    if (
+      document.visibilityState === 'visible' &&
+      cloudConfig.supabaseUrl &&
+      typeof authState !== 'undefined' &&
+      authState.isUnlocked &&
+      Date.now() - lastAutoPullTimestamp > 30000
+    ) {
       pullStateFromSupabaseCloud(true);
     }
   });

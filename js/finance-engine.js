@@ -7,6 +7,38 @@
 // Parcelamentos) da interface HTML. Isso permite testar toda a matemática
 // do sistema de forma isolada e confiável.
 
+// Calcula o saldo final bancário acumulado desde o início (2026-09) até targetPeriod (inclusive)
+function computeBankEndingBalanceThrough(targetPeriod, targetState) {
+  const basePeriod = '2026-09';
+  let curP = basePeriod;
+  let runningCents = toCents(targetState.periodStartingBalances?.[basePeriod]?.amount || 0);
+
+  let guard = 0;
+  while (curP <= targetPeriod && guard < 120) {
+    guard++;
+    if (curP !== basePeriod && targetState.periodStartingBalances?.[curP]?.isManualOverride) {
+      runningCents = toCents(targetState.periodStartingBalances[curP].amount || 0);
+    }
+
+    const pTx = (targetState.transactions || []).filter(
+      t => t.period === curP && t.type !== 'card' && t.accountId !== 'poupanca_caixa' && !t.isAutoProjected
+    );
+    pTx.forEach(t => {
+      const c = toCents(t.amount);
+      if (t.type === 'income' || t.kind === 'income' || t.kind === 'reimbursement') {
+        runningCents += c;
+      } else {
+        runningCents -= c;
+      }
+    });
+
+    if (curP === targetPeriod) break;
+    curP = addMonthsToPeriod(curP, 1);
+  }
+
+  return runningCents;
+}
+
 function getStartingBalanceForPeriod(period, stateRef) {
   const targetState = stateRef || state;
   if (!targetState.periodStartingBalances) targetState.periodStartingBalances = {};
@@ -18,26 +50,18 @@ function getStartingBalanceForPeriod(period, stateRef) {
 
   // Meses futuros que ainda não têm saldos/extratos bancários definidos (Nov/2026 em diante sem lançamentos próprios): mantêm saldo zerado
   if (period && period !== 'ALL' && /^\d{4}-\d{2}$/.test(period)) {
-    const hasOwnBankTx = (targetState.transactions || []).some(t => t.period === period && t.type !== 'card' && !t.isProjected);
+    const hasOwnBankTx = (targetState.transactions || []).some(
+      t => t.period === period && t.type !== 'card' && t.accountId !== 'poupanca_caixa' && !t.isProjected && !t.isAutoProjected
+    );
     const hasManual = targetState.periodStartingBalances[period]?.isManualOverride;
 
     if (period > '2026-10' && !hasOwnBankTx && !hasManual) {
       return { amount: 0, label: `Saldo zerado (aguardando extrato de ${formatPeriodLabel(period)})` };
     }
 
-    if (period === '2026-10') {
-      const prevP = '2026-09';
-      const prevStart = getStartingBalanceForPeriod(prevP, targetState);
-      const prevTx = (targetState.transactions || []).filter(t => t.period === prevP && t.type !== 'card');
-      let runningCents = toCents(prevStart.amount);
-      prevTx.forEach(t => {
-        const c = toCents(t.amount);
-        if (t.type === 'income' || t.kind === 'income' || t.kind === 'reimbursement') {
-          runningCents += c;
-        } else {
-          runningCents -= c;
-        }
-      });
+    if (period >= '2026-10') {
+      const prevP = addMonthsToPeriod(period, -1);
+      const runningCents = computeBankEndingBalanceThrough(prevP, targetState);
       return {
         amount: fromCents(runningCents),
         label: `Saldo vindo automaticamente de ${formatPeriodLabel(prevP)} (${formatCentsBRL(runningCents)})`
@@ -433,19 +457,21 @@ function calculateConsolidatedAllMonths(ownerFilter, scopeFilter) {
   let totalCardCents = 0;
   let totalInvoicePaidInBankCents = 0;
 
+  let latestBankEnding = 0;
+
   evolution.forEach(row => {
-    if (row.period <= '2026-10') {
+    if (row.hasDefinedValues) {
       totalIncomeCents += row.incomeCents;
       totalBankDebitCents += row.bankDebitCents;
       totalCardEveliCents += row.cardEveliCents;
       totalCardVitalCents += row.cardVitalCents;
       totalCardCents += row.cardTotalCents;
       totalInvoicePaidInBankCents += row.invoicePaidInBankCents;
+      latestBankEnding = row.bankEndingCents;
     }
   });
 
   const totalMonthlyNetCents = totalIncomeCents - totalBankDebitCents;
-  const latestBankEnding = evolution.find(r => r.period === '2026-10')?.bankEndingCents ?? 0;
   const caixaSavingsBalanceCents = toCents(state.savingsAccounts?.poupanca_caixa?.balance || 0);
 
   // Total de outros investimentos da família (Tesouro Direto, Poupança Itaú, etc.)
@@ -454,7 +480,9 @@ function calculateConsolidatedAllMonths(ownerFilter, scopeFilter) {
     ['tesouro_direto', 'poupanca_itau'].forEach(k => {
       const acc = state.savingsAccounts[k];
       if (acc) {
-        const m = acc.monthlyData?.['2026-10'] || acc.monthlyData?.['2026-09'];
+        const sortedMonthKeys = acc.monthlyData ? Object.keys(acc.monthlyData).sort().reverse() : [];
+        const latestKey = sortedMonthKeys[0];
+        const m = (latestKey && acc.monthlyData[latestKey]) || acc.monthlyData?.['2026-10'] || acc.monthlyData?.['2026-09'];
         const b = m?.balance !== undefined ? m.balance : (acc.balance || 0);
         extraInvestmentsCents += toCents(b);
       }

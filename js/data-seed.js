@@ -310,3 +310,102 @@ function getInitialFamilyData() {
     transactions: enrichTransactionsAndProjectInstallments(baseTransactions)
   };
 }
+
+// =====================================================================
+// CONTA EM BRANCO (DO ZERO) PARA NOVOS USUÁRIOS / OUTRAS FAMÍLIAS
+// =====================================================================
+// Qualquer pessoa de fora que fizer login (Google ou E-mail) sem pertencer
+// ao código privado do casal ('casal_eveli_vital') recebe uma estrutura
+// 100% zerada e isolada, sem nunca ver os dados pessoais da Éveli e do Vital.
+const COUPLE_HOUSEHOLD_CODE = 'casal_eveli_vital';
+
+function getEmptyInitialData(ownerName = 'Titular') {
+  return {
+    activeTab: 'overview',
+    selectedPeriod: '2026-10',
+    selectedOwner: 'ALL',
+    selectedScope: 'ALL',
+    includeCurrentCardBill: false,
+    cardsConfig: {
+      card_eveli_5544: {
+        id: 'card_eveli_5544',
+        name: 'Cartão Principal',
+        holder: ownerName || 'Titular',
+        limit: 0.00,
+        closingDay: 14,
+        dueDay: 21,
+        officialInvoiceTotals: {}
+      },
+      card_marido: {
+        id: 'card_marido',
+        name: 'Cartão Secundário',
+        holder: 'Cônjuge',
+        limit: 0.00,
+        closingDay: 10,
+        dueDay: 17,
+        officialInvoiceTotals: {}
+      }
+    },
+    savingsAccounts: {
+      tesouro_direto: {
+        id: 'tesouro_direto',
+        name: 'Tesouro Direto',
+        bank: 'Tesouro Nacional',
+        type: 'investment',
+        holder: 'Família',
+        notes: 'Investimento em Renda Fixa',
+        monthlyData: {
+          '2026-09': { balance: 0.00, earnings: 0.00, updatedAt: '-' },
+          '2026-10': { balance: 0.00, earnings: 0.00, updatedAt: '-' }
+        }
+      },
+      poupanca_itau: {
+        id: 'poupanca_itau',
+        name: 'Poupança Itaú',
+        bank: 'Banco Itaú',
+        type: 'savings',
+        holder: 'Família',
+        notes: 'Caderneta de Poupança',
+        monthlyData: {
+          '2026-09': { balance: 0.00, earnings: 0.00, updatedAt: '-' },
+          '2026-10': { balance: 0.00, earnings: 0.00, updatedAt: '-' }
+        }
+      },
+      poupanca_caixa: {
+        id: 'poupanca_caixa',
+        name: 'Poupança Caixa Econômica',
+        bank: 'Caixa Econômica Federal',
+        type: 'savings',
+        holder: 'Família',
+        balance: 0.00,
+        notes: 'Reserva da Família',
+        monthlyData: {
+          '2026-09': { balance: 0.00, earnings: 0.00, updatedAt: '-' },
+          '2026-10': { balance: 0.00, earnings: 0.00, updatedAt: '-' }
+        }
+      }
+    },
+    importedSources: [],
+    periodStartingBalances: {
+      '2026-09': { amount: 0.00, label: 'Saldo Inicial (Setembro/2026)' },
+      '2026-10': { amount: 0.00, label: 'Saldo Inicial (Outubro/2026)' },
+      'ALL':     { amount: 0.00, label: 'Saldo Inicial' }
+    },
+    budgets: {
+      'Lanches & Restaurantes': 0,
+      'Mercado & Hortifruti': 0,
+      'Uber & Transporte': 0,
+      'Parcelamentos Cartão': 0,
+      'Saúde, Farmácia & Academia': 0,
+      'Auto Escola & Detran': 0,
+      'Casa, Serviços & Outros': 0
+    },
+    customCategories: [],
+    futureGoals: [],
+    dailyExpenses: [],
+    uploadedFiles: [],
+    monthlySnapshots: {},
+    transactions: []
+  };
+}
+

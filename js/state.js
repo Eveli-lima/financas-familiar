@@ -51,13 +51,13 @@ function enrichTransactionsAndProjectInstallments(rawTransactions) {
     };
   });
 
-  // Projeta automaticamente as próximas parcelas das compras de 2026-10 para os meses seguintes
+  // Projeta automaticamente as próximas parcelas das compras de cartão (a partir de 2026-10) para os meses seguintes
   const existingIds = new Set(enriched.map(t => t.id));
   const projected = [];
 
   enriched.forEach(t => {
     if (
-      t.period === '2026-10' &&
+      t.period >= '2026-10' &&
       t.type === 'card' &&
       t.installmentCurrent &&
       t.installmentTotal &&
@@ -69,7 +69,18 @@ function enrichTransactionsAndProjectInstallments(rawTransactions) {
         const nextCur = t.installmentCurrent + step;
         const nextPeriod = addMonthsToPeriod(t.period, step);
         const projId = `${t.id}_proj_${nextPeriod}`;
-        if (!existingIds.has(projId)) {
+
+        // Evita duplicar se a fatura real do mês seguinte já tiver sido importada/lançada com esta parcela
+        const alreadyHasRealInstallment = enriched.some(other =>
+          !other.isAutoProjected &&
+          other.period === nextPeriod &&
+          other.accountId === t.accountId &&
+          other.installmentCurrent === nextCur &&
+          other.installmentTotal === t.installmentTotal &&
+          toCents(other.amount) === toCents(t.amount)
+        );
+
+        if (!existingIds.has(projId) && !alreadyHasRealInstallment) {
           const cleanBaseDesc = t.desc
             .replace(/\b\d{1,2}\/\d{1,2}\b/, `${String(nextCur).padStart(2, '0')}/${String(t.installmentTotal).padStart(2, '0')}`)
             .replace(/\(Acaba em Nov\)/gi, nextCur === t.installmentTotal ? '(🎉 Última Parcela!)' : '');
@@ -105,10 +116,44 @@ function sanitizeId(v) {
   return String(v ?? '').replace(/[^A-Za-z0-9_.\-]/g, '_').slice(0, 80);
 }
 
-function sanitizeState(raw) {
+function getActiveHouseholdCode() {
+  if (typeof cloudConfig !== 'undefined' && cloudConfig && cloudConfig.householdCode) {
+    return cloudConfig.householdCode;
+  }
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const rawCfg = localStorage.getItem('financas_familia_cloud_config_v1');
+      if (rawCfg) {
+        const parsedCfg = JSON.parse(rawCfg);
+        if (parsedCfg && parsedCfg.householdCode) return parsedCfg.householdCode;
+      }
+    } catch (e) {}
+  }
+  return typeof COUPLE_HOUSEHOLD_CODE !== 'undefined' ? COUPLE_HOUSEHOLD_CODE : 'casal_eveli_vital';
+}
+
+function isCoupleHousehold(code = getActiveHouseholdCode()) {
+  const target = typeof COUPLE_HOUSEHOLD_CODE !== 'undefined' ? COUPLE_HOUSEHOLD_CODE : 'casal_eveli_vital';
+  return !code || code === target;
+}
+
+function getActiveStorageKey(code = getActiveHouseholdCode()) {
+  if (isCoupleHousehold(code)) return STORAGE_KEY;
+  return `${STORAGE_KEY}_${sanitizeId(code)}`;
+}
+
+function getBaseDataForHousehold(code = getActiveHouseholdCode(), ownerName = 'Titular') {
+  if (isCoupleHousehold(code)) {
+    return getInitialFamilyData();
+  }
+  return typeof getEmptyInitialData === 'function' ? getEmptyInitialData(ownerName) : getInitialFamilyData();
+}
+
+function sanitizeState(raw, householdOverride) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw new Error('Formato de dados inválido.');
   }
+  const coupleMode = isCoupleHousehold(householdOverride);
   const clean = { ...raw };
 
   clean.transactions = (Array.isArray(raw.transactions) ? raw.transactions : [])
@@ -119,7 +164,7 @@ function sanitizeState(raw) {
       const out = {
         ...t,
         id: sanitizeId(t.id) || 'tx_' + Math.random().toString(36).slice(2, 10),
-        owner: ALLOWED_OWNERS.includes(rawOwner) ? rawOwner : 'Éveli',
+        owner: ALLOWED_OWNERS.includes(rawOwner) ? rawOwner : (coupleMode ? 'Éveli' : String(rawOwner || 'Titular').slice(0, 40)),
         period: /^\d{4}-\d{2}$/.test(String(t.period)) ? String(t.period) : '2026-10',
         desc: String(t.desc ?? '').slice(0, 200),
         category: String(t.category ?? 'Casa, Serviços & Outros').slice(0, 80),
@@ -179,6 +224,26 @@ function sanitizeState(raw) {
   const rawTesouro = raw.savingsAccounts?.tesouro_direto;
   const rawPoupItau = raw.savingsAccounts?.poupanca_itau;
 
+  const defaultTesouroMonthly = coupleMode
+    ? {
+        '2026-09': { balance: 8198.11, earnings: 87.37, updatedAt: '30/09/2026' },
+        '2026-10': { balance: 8260.70, earnings: 62.59, updatedAt: '22/10/2026' }
+      }
+    : {
+        '2026-09': { balance: 0, earnings: 0, updatedAt: '-' },
+        '2026-10': { balance: 0, earnings: 0, updatedAt: '-' }
+      };
+
+  const defaultPoupItauMonthly = coupleMode
+    ? {
+        '2026-09': { balance: 13.36, earnings: 0.09, updatedAt: '30/09/2026' },
+        '2026-10': { balance: 13.45, earnings: 0.09, updatedAt: '22/10/2026' }
+      }
+    : {
+        '2026-09': { balance: 0, earnings: 0, updatedAt: '-' },
+        '2026-10': { balance: 0, earnings: 0, updatedAt: '-' }
+      };
+
   clean.savingsAccounts = {
     tesouro_direto: {
       id: 'tesouro_direto',
@@ -187,10 +252,7 @@ function sanitizeState(raw) {
       type: 'investment',
       holder: 'Casal',
       notes: 'Investimento em Renda Fixa Pública',
-      monthlyData: rawTesouro?.monthlyData || {
-        '2026-09': { balance: 8198.11, earnings: 87.37, updatedAt: '30/09/2026' },
-        '2026-10': { balance: 8260.70, earnings: 62.59, updatedAt: '22/10/2026' }
-      }
+      monthlyData: rawTesouro?.monthlyData || defaultTesouroMonthly
     },
     poupanca_itau: {
       id: 'poupanca_itau',
@@ -199,10 +261,7 @@ function sanitizeState(raw) {
       type: 'savings',
       holder: 'Casal',
       notes: 'Caderneta de Poupança Itaú',
-      monthlyData: rawPoupItau?.monthlyData || {
-        '2026-09': { balance: 13.36, earnings: 0.09, updatedAt: '30/09/2026' },
-        '2026-10': { balance: 13.45, earnings: 0.09, updatedAt: '22/10/2026' }
-      }
+      monthlyData: rawPoupItau?.monthlyData || defaultPoupItauMonthly
     },
     poupanca_caixa: {
       id: 'poupanca_caixa',
@@ -225,20 +284,33 @@ function sanitizeState(raw) {
   // Gerenciador de Arquivos & Uploads (Extratos OFX, Faturas PDF e Fotos de Comprovantes)
   clean.uploadedFiles = (Array.isArray(raw.uploadedFiles) ? raw.uploadedFiles : [])
     .filter(f => f && typeof f === 'object')
-    .map(f => ({
-      id: sanitizeId(f.id) || 'file_' + Math.random().toString(36).slice(2, 10),
-      fileName: String(f.fileName || 'Arquivo').slice(0, 150),
-      fileType: ['bank_ofx', 'card_pdf', 'receipt_photo', 'other'].includes(f.fileType) ? f.fileType : 'other',
-      uploadedAt: String(f.uploadedAt || '').slice(0, 40),
-      period: String(f.period || '2026-10').slice(0, 10),
-      targetAccount: sanitizeId(f.targetAccount || ''),
-      accountLabel: String(f.accountLabel || '').slice(0, 80),
-      itemCount: Math.max(0, parseInt(f.itemCount, 10) || 0),
-      totalAmount: Math.max(0, Number(f.totalAmount) || 0),
-      receiptImage: typeof f.receiptImage === 'string' && f.receiptImage.length < 5000000 ? f.receiptImage : null,
-      dailyExpenseId: f.dailyExpenseId ? sanitizeId(f.dailyExpenseId) : null,
-      desc: String(f.desc || '').slice(0, 200)
-    }));
+    .map(f => {
+      const cleanFileId = sanitizeId(f.id) || 'file_' + Math.random().toString(36).slice(2, 10);
+      const cleanDailyId = f.dailyExpenseId ? sanitizeId(f.dailyExpenseId) : null;
+      const rawImg = typeof f.receiptImage === 'string' && f.receiptImage.length < 5000000 ? f.receiptImage : null;
+
+      // Evita duplicar a mesma foto Base64 em uploadedFiles e dailyExpenses (economiza 50% do localStorage)
+      const linkedDaily = clean.dailyExpenses.find(d => (cleanDailyId && d.id === cleanDailyId) || d.fileId === cleanFileId);
+      if (linkedDaily && rawImg && !linkedDaily.receiptImage) {
+        linkedDaily.receiptImage = rawImg;
+      }
+
+      return {
+        id: cleanFileId,
+        fileName: String(f.fileName || 'Arquivo').slice(0, 150),
+        fileType: ['bank_ofx', 'card_pdf', 'receipt_photo', 'other'].includes(f.fileType) ? f.fileType : 'other',
+        fileSize: Math.max(0, parseInt(f.fileSize, 10) || 0),
+        uploadedAt: String(f.uploadedAt || '').slice(0, 40),
+        period: String(f.period || '2026-10').slice(0, 10),
+        targetAccount: sanitizeId(f.targetAccount || ''),
+        accountLabel: String(f.accountLabel || '').slice(0, 80),
+        itemCount: Math.max(0, parseInt(f.itemCount, 10) || 0),
+        totalAmount: Math.max(0, Number(f.totalAmount) || 0),
+        receiptImage: linkedDaily ? null : rawImg,
+        dailyExpenseId: cleanDailyId,
+        desc: String(f.desc || '').slice(0, 200)
+      };
+    });
 
   // Vida financeira começa a partir de Setembro/2026 (meses anteriores desconsiderados)
   clean.transactions = clean.transactions.filter(t => String(t.period) >= '2026-09');
@@ -265,56 +337,92 @@ function sanitizeState(raw) {
   return clean;
 }
 
-function loadState() {
+function loadState(householdOverride, ownerName = 'Titular') {
+  const code = householdOverride || getActiveHouseholdCode();
+  const storageKey = getActiveStorageKey(code);
+
   if (typeof localStorage !== 'undefined') {
-    const savedV5 = localStorage.getItem(STORAGE_KEY);
+    const savedV5 = localStorage.getItem(storageKey);
     if (savedV5) {
       try {
-        const parsed = sanitizeState(JSON.parse(savedV5));
+        const parsed = sanitizeState(JSON.parse(savedV5), code);
         parsed.transactions = enrichTransactionsAndProjectInstallments(parsed.transactions || []);
         return parsed;
       } catch (e) {}
     }
 
-    // Migração transparente da v4 caso exista no navegador
-    const savedV4 = localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (savedV4) {
-      try {
-        const old = JSON.parse(savedV4);
-        const fresh = getInitialFamilyData();
-        const migratedTx = (old.transactions || []).map(t => {
-          if (t.id === 'fc_u27' && (Number(t.amount) === 19.86 || Number(t.amount) === 10.06)) {
-            return { ...t, desc: 'DL *UberRides Sao Paulo BR', amount: 9.96 };
-          }
-          return t;
-        });
-        fresh.selectedPeriod = old.selectedPeriod || '2026-10';
-        fresh.selectedOwner = old.selectedOwner || 'ALL';
-        fresh.includeCurrentCardBill = old.includeCurrentCardBill !== undefined ? old.includeCurrentCardBill : false;
-        fresh.budgets = { ...fresh.budgets, ...(old.budgets || {}) };
-        fresh.futureGoals = old.futureGoals || fresh.futureGoals;
-        fresh.customCategories = Array.isArray(old.customCategories) ? old.customCategories : (fresh.customCategories || []);
-        fresh.dailyExpenses = old.dailyExpenses || fresh.dailyExpenses || [];
-        fresh.monthlySnapshots = old.monthlySnapshots || fresh.monthlySnapshots || {};
-        fresh.periodStartingBalances = old.periodStartingBalances || fresh.periodStartingBalances;
-        fresh.transactions = enrichTransactionsAndProjectInstallments(migratedTx);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
-        return fresh;
-      } catch (e) {}
+    // Migração transparente da v4 apenas para a conta oficial do casal
+    if (isCoupleHousehold(code)) {
+      const savedV4 = localStorage.getItem(LEGACY_STORAGE_KEY);
+      if (savedV4) {
+        try {
+          const old = JSON.parse(savedV4);
+          const fresh = getInitialFamilyData();
+          const migratedTx = (old.transactions || []).map(t => {
+            if (t.id === 'fc_u27' && (Number(t.amount) === 19.86 || Number(t.amount) === 10.06)) {
+              return { ...t, desc: 'DL *UberRides Sao Paulo BR', amount: 9.96 };
+            }
+            return t;
+          });
+          fresh.selectedPeriod = old.selectedPeriod || '2026-10';
+          fresh.selectedOwner = old.selectedOwner || 'ALL';
+          fresh.includeCurrentCardBill = old.includeCurrentCardBill !== undefined ? old.includeCurrentCardBill : false;
+          fresh.budgets = { ...fresh.budgets, ...(old.budgets || {}) };
+          fresh.futureGoals = old.futureGoals || fresh.futureGoals;
+          fresh.customCategories = Array.isArray(old.customCategories) ? old.customCategories : (fresh.customCategories || []);
+          fresh.dailyExpenses = old.dailyExpenses || fresh.dailyExpenses || [];
+          fresh.monthlySnapshots = old.monthlySnapshots || fresh.monthlySnapshots || {};
+          fresh.periodStartingBalances = old.periodStartingBalances || fresh.periodStartingBalances;
+          fresh.transactions = enrichTransactionsAndProjectInstallments(migratedTx);
+          localStorage.setItem(storageKey, JSON.stringify(fresh));
+          return fresh;
+        } catch (e) {}
+      }
     }
   }
 
-  const initial = getInitialFamilyData();
+  const initial = getBaseDataForHousehold(code, ownerName);
   initial.transactions = enrichTransactionsAndProjectInstallments(initial.transactions || []);
   return initial;
 }
 
 function saveState() {
+  const storageKey = getActiveStorageKey();
   if (typeof localStorage !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(state));
+    } catch (err) {
+      // Proteção contra estouro de memória (QuotaExceededError de 5MB do navegador):
+      // Remove primeiro eventuais imagens duplicadas ou as fotos mais antigas já conciliadas para nunca perder lançamentos financeiros
+      try {
+        if (Array.isArray(state.uploadedFiles)) {
+          state.uploadedFiles.forEach(f => {
+            if (f.dailyExpenseId && f.receiptImage) f.receiptImage = null;
+          });
+        }
+        if (Array.isArray(state.dailyExpenses)) {
+          for (let i = state.dailyExpenses.length - 1; i >= 0; i--) {
+            if (state.dailyExpenses[i].receiptImage) {
+              state.dailyExpenses[i].receiptImage = null;
+              break;
+            }
+          }
+        }
+        localStorage.setItem(storageKey, JSON.stringify(state));
+      } catch (retryErr) {
+        console.warn('Limite de armazenamento local atingido:', retryErr);
+      }
+    }
   }
   if (typeof scheduleCloudAutoSync === 'function') {
     scheduleCloudAutoSync();
+  }
+}
+
+function switchActiveHouseholdState(householdCode, ownerName = 'Titular') {
+  state = loadState(householdCode, ownerName);
+  if (typeof renderAll === 'function') {
+    renderAll();
   }
 }
 

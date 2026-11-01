@@ -40,6 +40,12 @@ function toggleIncludeCardBill(checked) {
 
 function editPrevBalanceManual() {
   const p = state.selectedPeriod;
+  if (typeof isPeriodLockedForUser === 'function' && isPeriodLockedForUser(p)) {
+    if (typeof alert === 'function') {
+      alert('🔒 Mês Protegido!\n\nO saldo de meses anteriores ou encerrados é imutável pela interface e só pode ser alterado pelo desenvolvedor via terminal.');
+    }
+    return false;
+  }
   const curInfo = getStartingBalanceForPeriod(p);
   const val = prompt(`Informe o Saldo Bancário Inicial da Conta Conjunta Itaú para (${formatPeriodLabel(p)}):`, curInfo.amount);
   if (val === null) return;
@@ -651,7 +657,17 @@ function addManualTransaction() {
 
 function openEditTxModal(id) {
   const tx = state.transactions.find(t => t.id === id);
-  if (!tx) return;
+  if (!tx) return false;
+  if (typeof isTransactionProtected === 'function' && isTransactionProtected(tx)) {
+    if (typeof alert === 'function') {
+      alert(
+        '🔒 Registro Oficial Protegido!\n\n' +
+        'Este lançamento veio de um documento enviado (Extrato da Conta ou Fatura de Cartão) ou pertence a um mês anterior consolidado.\n\n' +
+        'Na interface, o usuário pode editar apenas lançamentos manuais do mês aberto. Alterações em documentos e meses anteriores são exclusivas do desenvolvedor via terminal.'
+      );
+    }
+    return false;
+  }
   document.getElementById('editTxId').value = tx.id;
   document.getElementById('editTxOwner').value = tx.owner || 'Éveli';
   document.getElementById('editTxScope').value = tx.scope || 'shared';
@@ -665,6 +681,7 @@ function openEditTxModal(id) {
   document.getElementById('editTxInstCur').value = tx.installmentCurrent || '';
   document.getElementById('editTxInstTot').value = tx.installmentTotal || '';
   document.getElementById('editTxModal').classList.remove('hidden');
+  return true;
 }
 
 function closeEditTxModal() {
@@ -674,12 +691,27 @@ function closeEditTxModal() {
 function saveEditedTransaction() {
   const id = document.getElementById('editTxId').value;
   const tx = state.transactions.find(t => t.id === id);
-  if (!tx) return;
+  if (!tx) return false;
+  if (typeof isTransactionProtected === 'function' && isTransactionProtected(tx)) {
+    if (typeof alert === 'function') {
+      alert('🔒 Operação bloqueada: Apenas lançamentos manuais do mês aberto podem ser editados pela interface.');
+    }
+    closeEditTxModal();
+    return false;
+  }
+
+  const newPeriod = document.getElementById('editTxPeriod').value.trim();
+  if (typeof isPeriodLockedForUser === 'function' && isPeriodLockedForUser(newPeriod)) {
+    if (typeof alert === 'function') {
+      alert('🔒 Não é permitido mover um lançamento para um mês anterior já consolidado.');
+    }
+    return false;
+  }
 
   const amount = parseFloat(document.getElementById('editTxAmount').value);
   if (isNaN(amount) || amount <= 0) {
     alert('Informe um valor válido.');
-    return;
+    return false;
   }
 
   const accountId = document.getElementById('editTxAccount').value;
@@ -698,7 +730,7 @@ function saveEditedTransaction() {
   tx.kind = kind;
   tx.type = (kind === 'income' || (kind === 'reimbursement' && !isCard)) ? 'income' : (isCard ? 'card' : 'debit');
   tx.date = document.getElementById('editTxDate').value.trim();
-  tx.period = document.getElementById('editTxPeriod').value.trim();
+  tx.period = newPeriod;
   tx.category = document.getElementById('editTxCategory').value;
   tx.amount = fromCents(toCents(amount));
   tx.desc = document.getElementById('editTxDesc').value.trim();
@@ -716,11 +748,23 @@ function saveEditedTransaction() {
   closeEditTxModal();
   saveState();
   renderAll();
+  return true;
 }
 
-function deleteTransaction(id) {
+function deleteTransaction(id, options) {
   const tx = state.transactions.find(t => t.id === id);
-  if (!tx) return;
+  if (!tx) return false;
+
+  const isDevTerminal = options && options.devTerminal === true;
+  if (!isDevTerminal && typeof isTransactionProtected === 'function' && isTransactionProtected(tx)) {
+    if (typeof alert === 'function') {
+      alert(
+        '🔒 Exclusão Bloqueada!\n\n' +
+        'Lançamentos gerados por documentos enviados (Extrato da Conta ou Fatura do Cartão) ou de meses anteriores só podem ser alterados pelo desenvolvedor via terminal.'
+      );
+    }
+    return false;
+  }
 
   if (tx.goalId) {
     const goal = state.futureGoals.find(g => g.id === tx.goalId);
@@ -738,6 +782,7 @@ function deleteTransaction(id) {
   state.transactions = state.transactions.filter(t => t.id !== id);
   saveState();
   renderAll();
+  return true;
 }
 
 function editCategoryBudget(cat) {
@@ -981,18 +1026,51 @@ function closeInvestmentImageModal() {
   if (modal) modal.classList.add('hidden');
 }
 
+function compressImageDataUrl(rawDataUrl, maxDim = 720, quality = 0.7, callback) {
+  if (typeof Image === 'undefined' || typeof document === 'undefined') {
+    callback(rawDataUrl);
+    return;
+  }
+  const img = new Image();
+  img.onload = function() {
+    const canvas = document.createElement('canvas');
+    let w = img.width;
+    let h = img.height;
+    if (w > maxDim || h > maxDim) {
+      if (w > h) {
+        h = Math.round((h * maxDim) / w);
+        w = maxDim;
+      } else {
+        w = Math.round((w * maxDim) / h);
+        h = maxDim;
+      }
+    }
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+    callback(canvas.toDataURL('image/jpeg', quality));
+  };
+  img.onerror = function() {
+    callback(rawDataUrl);
+  };
+  img.src = rawDataUrl;
+}
+
 function handleInvestmentImageSelect(e) {
   const file = e.target.files?.[0];
   if (!file) return;
   const reader = new FileReader();
   reader.onload = function(evt) {
-    currentInvestmentScreenshotDataUri = evt.target.result;
-    const previewBox = document.getElementById('investmentImagePreviewBox');
-    const previewImg = document.getElementById('investmentImagePreviewImg');
-    if (previewBox && previewImg) {
-      previewImg.src = currentInvestmentScreenshotDataUri;
-      previewBox.classList.remove('hidden');
-    }
+    compressImageDataUrl(evt.target.result, 720, 0.7, function(compressedUri) {
+      currentInvestmentScreenshotDataUri = compressedUri;
+      const previewBox = document.getElementById('investmentImagePreviewBox');
+      const previewImg = document.getElementById('investmentImagePreviewImg');
+      if (previewBox && previewImg) {
+        previewImg.src = currentInvestmentScreenshotDataUri;
+        previewBox.classList.remove('hidden');
+      }
+    });
   };
   reader.readAsDataURL(file);
 }
@@ -1047,7 +1125,7 @@ function saveInvestmentImageInfo() {
     balance: fromCents(toCents(pBal)),
     earnings: fromCents(toCents(pEarn)),
     updatedAt: dVal,
-    screenshotUri: currentInvestmentScreenshotDataUri
+    screenshotUri: null // Evita duplicar a mesma imagem Base64 em duas contas
   };
 
   saveState();
@@ -1136,29 +1214,7 @@ function handleReceiptPhotoUpload(e) {
 
   const reader = new FileReader();
   reader.onload = function(evt) {
-    const rawData = evt.target.result;
-
-    const img = new Image();
-    img.onload = function() {
-      const canvas = document.createElement('canvas');
-      const maxDim = 800;
-      let w = img.width;
-      let h = img.height;
-      if (w > maxDim || h > maxDim) {
-        if (w > h) {
-          h = Math.round((h * maxDim) / w);
-          w = maxDim;
-        } else {
-          w = Math.round((w * maxDim) / h);
-          h = maxDim;
-        }
-      }
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, w, h);
-      const compressedUri = canvas.toDataURL('image/jpeg', 0.75);
-
+    compressImageDataUrl(evt.target.result, 720, 0.7, function(compressedUri) {
       tempReceiptBase64 = compressedUri;
       const previewBox = document.getElementById('receiptPreviewBox');
       const previewImg = document.getElementById('receiptPreviewImg');
@@ -1172,8 +1228,7 @@ function handleReceiptPhotoUpload(e) {
         const today = new Date().toISOString().split('T')[0];
         dateInp.value = today;
       }
-    };
-    img.src = rawData;
+    });
   };
   reader.readAsDataURL(file);
 }
@@ -1247,7 +1302,7 @@ function saveDailyExpense(e) {
       accountLabel: `Controle Diário (${paymentMethod === 'credit_card' ? 'Cartão ' + cardHolder : 'Pix/Débito'})`,
       itemCount: 1,
       totalAmount: amount,
-      receiptImage: tempReceiptBase64,
+      receiptImage: null, // Armazenado exclusivamente em dailyExpenses para não duplicar memória no localStorage
       dailyExpenseId: dailyId,
       desc
     });
@@ -1305,16 +1360,41 @@ function toggleManualDailyReconciliation(id) {
   if (typeof renderAll === 'function') renderAll();
 }
 
-function viewReceiptModal(id) {
-  const item = (state.dailyExpenses || []).find(d => d.id === id);
-  if (!item || !item.receiptImage) return;
+function viewReceiptModal(idOrDataUri, fallbackTitle) {
+  if (!idOrDataUri) return;
+
+  let imgSrc = null;
+  let titleText = fallbackTitle ? `Nota Fiscal: ${fallbackTitle}` : 'Nota Fiscal / Comprovante';
+
+  if (String(idOrDataUri).startsWith('data:image/')) {
+    imgSrc = idOrDataUri;
+  } else {
+    const dailyItem = (state.dailyExpenses || []).find(
+      d => d.id === idOrDataUri || d.fileId === idOrDataUri
+    );
+    if (dailyItem && dailyItem.receiptImage) {
+      imgSrc = dailyItem.receiptImage;
+      titleText = `Nota Fiscal: ${dailyItem.desc} (R$ ${Number(dailyItem.amount || 0).toFixed(2)})`;
+    } else {
+      const fileItem = (state.uploadedFiles || []).find(
+        f => f.id === idOrDataUri || f.dailyExpenseId === idOrDataUri
+      );
+      if (fileItem) {
+        imgSrc = getReceiptImageForFile(fileItem);
+        const amountStr = fileItem.totalAmount ? ` (R$ ${Number(fileItem.totalAmount).toFixed(2)})` : '';
+        titleText = `Nota Fiscal: ${fileItem.desc || fileItem.fileName || fallbackTitle || 'Comprovante'}${amountStr}`;
+      }
+    }
+  }
+
+  if (!imgSrc) return;
 
   const modal = document.getElementById('receiptViewerModal');
   const imgEl = document.getElementById('receiptViewerImg');
   const titleEl = document.getElementById('receiptViewerTitle');
   if (modal && imgEl) {
-    imgEl.src = item.receiptImage;
-    if (titleEl) titleEl.textContent = `Nota Fiscal: ${item.desc} (R$ ${item.amount.toFixed(2)})`;
+    imgEl.src = imgSrc;
+    if (titleEl) titleEl.textContent = titleText;
     modal.classList.remove('hidden');
   }
 }
@@ -1831,6 +1911,15 @@ function setFilesSearch(val) {
   renderFilesManagerModalContent();
 }
 
+function getReceiptImageForFile(file) {
+  if (!file) return null;
+  if (file.receiptImage) return file.receiptImage;
+  const linked = (state.dailyExpenses || []).find(
+    d => (file.dailyExpenseId && d.id === file.dailyExpenseId) || (file.id && d.fileId === file.id)
+  );
+  return linked && linked.receiptImage ? linked.receiptImage : null;
+}
+
 function toggleFileDetails(fileId) {
   activeFileDetailsId = (activeFileDetailsId === fileId) ? null : fileId;
   renderFilesManagerModalContent();
@@ -1903,13 +1992,13 @@ function renderFilesManagerModalContent() {
       </div>
     </div>
 
-    <!-- Regra de Exclusão em Cascata (Banner Educativo) -->
-    <div class="bg-amber-50/90 border border-amber-200/90 rounded-2xl p-3 flex items-start gap-2.5 text-xs text-amber-900">
-      <span class="text-base shrink-0 mt-0.5">ℹ️</span>
+    <!-- Regra de Proteção de Documentos e Histórico (Banner Educativo) -->
+    <div class="bg-sky-50/90 border border-sky-200/90 rounded-2xl p-3 flex items-start gap-2.5 text-xs text-sky-950">
+      <span class="text-base shrink-0 mt-0.5">🔒</span>
       <div class="space-y-0.5">
-        <strong class="font-bold">Controle com Exclusão em Cascata:</strong>
-        <p class="text-[11px] text-amber-800 leading-relaxed">
-          Cada extrato, fatura ou foto enviada fica registrada nesta área. Se você enviou um arquivo por engano ou duplicado, ao clicar em <strong>"Excluir Arquivo"</strong> o sistema apaga em cascata o arquivo e <strong>todos os lançamentos gerados por ele</strong> de uma única vez.
+        <strong class="font-bold">Integridade Garantida (Documentos e Meses Anteriores Protegidos):</strong>
+        <p class="text-[11px] text-sky-900 leading-relaxed">
+          Os extratos bancários (<strong>.OFX</strong>), faturas de cartão (<strong>.PDF</strong>) e informações de meses anteriores ficam protegidos contra exclusão pela interface. O usuário pode editar apenas lançamentos manuais do mês aberto, enquanto documentos enviados e históricos anteriores só podem ser alterados pelo desenvolvedor via terminal.
         </p>
       </div>
     </div>
@@ -1967,14 +2056,16 @@ function renderFilesManagerModalContent() {
 
         // Formatação de tamanho
         const sizeKb = file.fileSize ? `${Math.round(file.fileSize / 1024)} KB` : '';
+        const resolvedReceiptImg = getReceiptImageForFile(file);
+        const receiptTargetId = file.dailyExpenseId || file.id;
 
         return `
           <div class="bg-white border ${isExpanded ? 'border-sky-400 ring-2 ring-sky-200/50' : 'border-slate-200'} rounded-2xl shadow-xs transition hover:border-slate-300 overflow-hidden">
             <div class="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div class="flex items-start gap-3 min-w-0 flex-1">
-                ${file.fileType === 'receipt_photo' && file.receiptImage ? `
-                  <div onclick="viewReceiptModal('${file.receiptImage}', '${escapeHtml(file.fileName)}')" class="shrink-0 w-12 h-12 rounded-xl border border-amber-200 overflow-hidden bg-slate-100 cursor-pointer shadow-xs hover:opacity-90 relative group" title="Clique para ampliar a foto da nota">
-                    <img src="${file.receiptImage}" alt="Nota" class="w-full h-full object-cover" />
+                ${file.fileType === 'receipt_photo' && resolvedReceiptImg ? `
+                  <div onclick="viewReceiptModal('${escapeHtml(receiptTargetId)}', '${escapeHtml(file.fileName)}')" class="shrink-0 w-12 h-12 rounded-xl border border-amber-200 overflow-hidden bg-slate-100 cursor-pointer shadow-xs hover:opacity-90 relative group" title="Clique para ampliar a foto da nota">
+                    <img src="${resolvedReceiptImg}" alt="Nota" class="w-full h-full object-cover" />
                     <div class="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-white text-xs">🔍</div>
                   </div>
                 ` : `
@@ -2020,17 +2111,24 @@ function renderFilesManagerModalContent() {
                   </button>
                 ` : ''}
 
-                ${file.receiptImage ? `
-                  <button onclick="viewReceiptModal('${file.receiptImage}', '${escapeHtml(file.fileName)}')" class="text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-semibold px-2.5 py-1.5 rounded-xl transition flex items-center gap-1" title="Ver foto em tela cheia">
+                ${resolvedReceiptImg ? `
+                  <button onclick="viewReceiptModal('${escapeHtml(receiptTargetId)}', '${escapeHtml(file.fileName)}')" class="text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-semibold px-2.5 py-1.5 rounded-xl transition flex items-center gap-1" title="Ver foto em tela cheia">
                     <span>📷</span>
                     <span class="hidden sm:inline">Foto</span>
                   </button>
                 ` : ''}
 
-                <button onclick="deleteUploadedFileCascade('${file.id}')" class="text-xs bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1 cursor-pointer" title="Excluir este arquivo e apagar em cascata todos os lançamentos gerados por ele">
-                  <span>🗑️</span>
-                  <span>Excluir Arquivo</span>
-                </button>
+                ${(typeof isUploadedFileProtected === 'function' && isUploadedFileProtected(file)) ? `
+                  <span class="text-[11px] bg-slate-100 text-slate-600 border border-slate-200 font-semibold px-3 py-1.5 rounded-xl flex items-center gap-1 select-none" title="Documento oficial da conta/cartão ou de mês anterior. Protegido contra exclusão pela interface (somente terminal).">
+                    <span>🔒</span>
+                    <span>Protegido</span>
+                  </span>
+                ` : `
+                  <button onclick="deleteUploadedFileCascade('${file.id}')" class="text-xs bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1 cursor-pointer" title="Excluir nota manual do mês atual">
+                    <span>🗑️</span>
+                    <span>Excluir Nota</span>
+                  </button>
+                `}
               </div>
             </div>
 
@@ -2081,10 +2179,22 @@ function renderFilesManagerModalContent() {
   container.innerHTML = html;
 }
 
-function deleteUploadedFileCascade(fileId) {
-  if (!Array.isArray(state.uploadedFiles)) return;
+function deleteUploadedFileCascade(fileId, options) {
+  if (!Array.isArray(state.uploadedFiles)) return false;
   const file = state.uploadedFiles.find(f => f.id === fileId);
-  if (!file) return;
+  if (!file) return false;
+
+  const isDevTerminal = options && options.devTerminal === true;
+  if (!isDevTerminal && typeof isUploadedFileProtected === 'function' && isUploadedFileProtected(file)) {
+    if (typeof alert === 'function') {
+      alert(
+        '🔒 Documento Oficial Protegido!\n\n' +
+        'Os documentos enviados da Conta (.OFX), dos Cartões (.PDF) e informações de meses anteriores não podem ser apagados pela interface.\n\n' +
+        'Qualquer manutenção nesses documentos é restrita ao desenvolvedor via terminal.'
+      );
+    }
+    return false;
+  }
 
   const linkedTxs = (state.transactions || []).filter(t => t.fileId === fileId);
   const linkedDaily = (state.dailyExpenses || []).filter(d => d.fileId === fileId || d.id === file.dailyExpenseId);

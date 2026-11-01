@@ -219,6 +219,30 @@ runTest('11. Transporte automático de saldo da conta entre meses consecutivos',
   assert.strictEqual(startNov.amount, 0); // Não propaga saldo de outubro para meses futuros sem dados
   const startDec = ctx.getStartingBalanceForPeriod('2026-12');
   assert.strictEqual(startDec.amount, 0); // Permanece zerado
+
+  // Simula entrada de lançamentos bancários reais em Nov/26 e Dez/26 para validar encadeamento contínuo
+  const st = getState();
+  const mockState = {
+    ...st,
+    periodStartingBalances: { ...st.periodStartingBalances },
+    transactions: [
+      ...st.transactions,
+      { id: 'nov_inc_1', period: '2026-11', accountId: 'cc_itau_conjunta', type: 'income', kind: 'income', amount: 1004.49 }
+    ]
+  };
+  const startNovActive = ctx.getStartingBalanceForPeriod('2026-11', mockState);
+  assert.strictEqual(startNovActive.amount, -4.49); // Puxou automaticamente o saldo final de Out/26 (-R$ 4,49)
+  const sumNovActive = ctx.calculatePeriodSummary(
+    mockState.transactions.filter(t => t.period === '2026-11'),
+    '2026-11',
+    mockState
+  );
+  assert.strictEqual(sumNovActive.bankEndingBalanceCents, 100000); // -4,49 + 1004,49 = R$ 1.000,00
+
+  // Se Dez/26 também receber lançamento, puxa automaticamente os R$ 1.000,00 finais de Nov/26
+  mockState.transactions.push({ id: 'dec_exp_1', period: '2026-12', accountId: 'cc_itau_conjunta', type: 'debit', kind: 'expense', amount: 250 });
+  const startDecActive = ctx.getStartingBalanceForPeriod('2026-12', mockState);
+  assert.strictEqual(startDecActive.amount, 1000.00);
 });
 
 runTest('12. Suporte ao titular "Vital" e Cartão Vital preservado com limite', () => {
@@ -453,16 +477,22 @@ runTest('18. Regras de Cartão de Crédito: isolamento estrito sem somar ou mist
   assert.strictEqual(octHasSeptItem, false);
 });
 
-runTest('19. Central de Arquivos & Exclusão em Cascata (OFX, PDF e Fotos de Notas)', () => {
+runTest('19. Proteção da Base Oficial, Documentos (OFX/PDF) e Meses Anteriores (Somente Dev no Terminal)', () => {
   const st = getState();
   if (!Array.isArray(st.uploadedFiles)) st.uploadedFiles = [];
-  
-  // 1. Simula envio de um extrato OFX com 2 lançamentos vinculados
+
+  // 0. Usuário nunca pode zerar o banco de dados pela interface
+  const countBeforeReset = st.transactions.length;
+  assert.strictEqual(ctx.resetRealData(), false, 'resetRealData deve bloquear o apagamento da base pela interface');
+  assert.strictEqual(st.transactions.length, countBeforeReset, 'Nenhum lançamento deve ser perdido ao tentar chamar resetRealData');
+
+  // 1. Simula envio de um extrato OFX oficial
   const fileIdOfx = 'file_ofx_test_cascade';
   st.uploadedFiles.push({
     id: fileIdOfx,
     fileName: 'extrato_itau_setembro.ofx',
     fileType: 'bank_ofx',
+    period: '2026-09',
     itemCount: 2
   });
   st.transactions.push(
@@ -470,46 +500,50 @@ runTest('19. Central de Arquivos & Exclusão em Cascata (OFX, PDF e Fotos de Not
     { id: 'tx_ofx_2', fileId: fileIdOfx, desc: 'SUPERMERCADO OFX', amount: 200, period: '2026-09', accountId: 'cc_itau_conjunta', type: 'debit', kind: 'expense' }
   );
 
-  // 2. Simula envio de uma foto de nota fiscal no controle diário
-  const fileIdReceipt = 'file_receipt_test_cascade';
-  st.uploadedFiles.push({
-    id: fileIdReceipt,
-    fileName: 'nota_fiscal_mercado.jpg',
-    fileType: 'receipt_photo',
-    dailyExpenseId: 'daily_cascade_1',
-    itemCount: 1
+  // 2. Tentativa do usuário de excluir o arquivo OFX ou seus lançamentos pela interface deve ser BLOQUEADA
+  assert.strictEqual(ctx.deleteUploadedFileCascade(fileIdOfx), false, 'Usuário não pode excluir documento OFX pela interface');
+  assert.strictEqual(ctx.deleteTransaction('tx_ofx_1'), false, 'Usuário não pode excluir lançamento vindo de documento OFX');
+  assert.strictEqual(ctx.openEditTxModal('tx_ofx_1'), false, 'Usuário não pode editar lançamento de mês anterior / documento OFX');
+  assert.strictEqual(st.transactions.some(t => t.id === 'tx_ofx_1'), true, 'Lançamento oficial permanece protegido');
+
+  // 3. Lançamento MANUAL do mês aberto PODE ser editado/excluído pelo usuário
+  st.transactions.push({
+    id: 'bank_manual_test_1',
+    isManual: true,
+    desc: 'Lanche Manual Outubro',
+    amount: 45,
+    period: '2026-10',
+    accountId: 'cc_itau_conjunta',
+    type: 'debit',
+    kind: 'expense'
   });
-  st.dailyExpenses.push({
-    id: 'daily_cascade_1',
-    fileId: fileIdReceipt,
-    desc: 'Compra Mercado c/ Foto',
-    amount: 85.50,
-    period: '2026-09',
-    direction: 'expense'
-  });
+  assert.strictEqual(ctx.isTransactionProtected(st.transactions.find(t => t.id === 'bank_manual_test_1')), false);
+  assert.strictEqual(ctx.deleteTransaction('bank_manual_test_1'), true, 'Usuário pode excluir lançamento manual do mês aberto');
+  assert.strictEqual(st.transactions.some(t => t.id === 'bank_manual_test_1'), false);
 
-  // Verifica que os itens existem antes da exclusão
-  assert.strictEqual(st.transactions.some(t => t.id === 'tx_ofx_1'), true);
-  assert.strictEqual(st.transactions.some(t => t.id === 'tx_ofx_2'), true);
-  assert.strictEqual(st.dailyExpenses.some(d => d.id === 'daily_cascade_1'), true);
-
-  // 3. Executa exclusão em cascata do arquivo OFX
-  ctx.deleteUploadedFileCascade(fileIdOfx);
-
-  // O arquivo foi removido do registro
+  // 4. Desenvolvedor via terminal ({ devTerminal: true }) consegue remover o arquivo de teste em cascata
+  assert.strictEqual(ctx.deleteUploadedFileCascade(fileIdOfx, { devTerminal: true }), undefined);
   assert.strictEqual(st.uploadedFiles.some(f => f.id === fileIdOfx), false);
-  // TODOS os lançamentos gerados pelo OFX foram excluídos em cascata
   assert.strictEqual(st.transactions.some(t => t.id === 'tx_ofx_1'), false);
   assert.strictEqual(st.transactions.some(t => t.id === 'tx_ofx_2'), false);
 
-  // O lançamento do controle diário da foto continua intacto
-  assert.strictEqual(st.dailyExpenses.some(d => d.id === 'daily_cascade_1'), true);
+  // 5. Garante que fotos de notas fiscais não fiquem duplicadas em uploadedFiles + dailyExpenses (economia de 50% de memória)
+  const deduped = ctx.sanitizeState({
+    transactions: [{ id: 'tx_keep', period: '2026-10', amount: 10 }],
+    dailyExpenses: [
+      { id: 'd_photo_1', fileId: 'f_photo_1', period: '2026-10', desc: 'Nota Teste', amount: 50, receiptImage: 'data:image/jpeg;base64,ABC123' }
+    ],
+    uploadedFiles: [
+      { id: 'f_photo_1', dailyExpenseId: 'd_photo_1', fileType: 'receipt_photo', fileName: 'nota.jpg', receiptImage: 'data:image/jpeg;base64,ABC123' }
+    ]
+  });
+  assert.strictEqual(deduped.dailyExpenses[0].receiptImage, 'data:image/jpeg;base64,ABC123');
+  assert.strictEqual(deduped.uploadedFiles[0].receiptImage, null, 'A cópia duplicada em uploadedFiles deve ser limpa para poupar localStorage');
 
-  // 4. Executa exclusão em cascata da foto do recibo
-  ctx.deleteUploadedFileCascade(fileIdReceipt);
-  assert.strictEqual(st.uploadedFiles.some(f => f.id === fileIdReceipt), false);
-  // O lançamento diário associado à nota foi excluído em cascata
-  assert.strictEqual(st.dailyExpenses.some(d => d.id === 'daily_cascade_1'), false);
+  // 6. Testa resolução universal da imagem via getReceiptImageForFile
+  st.dailyExpenses.push(deduped.dailyExpenses[0]);
+  st.uploadedFiles.push(deduped.uploadedFiles[0]);
+  assert.strictEqual(ctx.getReceiptImageForFile(deduped.uploadedFiles[0]), 'data:image/jpeg;base64,ABC123');
 });
 
 runTest('20. Importação de PDF de Fatura do Cartão: ciclo completo alocado no mês da fatura (Fatura 21/09 R$ 3.375,50)', () => {
@@ -635,6 +669,40 @@ runTest('24. Gerador de Senha Forte e Medidor de Força Criptográfica', () => {
   assert.ok(strengthStrong.score >= 85, 'Senha gerada deve atingir nível Excelente');
   assert.strictEqual(strengthStrong.label, 'Excelente');
   assert.strictEqual(strengthStrong.bars, 4);
+});
+
+runTest('25. Isolamento Multi-Conta: Outra pessoa começa em uma conta 100% do zero sem ver dados do casal', () => {
+  // 1. Éveli ou Vital são identificados na conta oficial 'casal_eveli_vital'
+  const coupleUser = ctx.resolveUserHouseholdAndProfile({
+    id: 'uid_eveli_1',
+    email: 'eveli@gmail.com',
+    user_metadata: { full_name: 'Éveli' }
+  });
+  assert.strictEqual(coupleUser.isCouple, true);
+  assert.strictEqual(coupleUser.householdCode, 'casal_eveli_vital');
+  assert.strictEqual(coupleUser.person, 'Éveli');
+
+  // 2. Qualquer outra pessoa (Google ou E-mail externo) NUNCA entra em 'casal_eveli_vital'
+  const externalUser = ctx.resolveUserHouseholdAndProfile({
+    id: 'uid_visitante_999',
+    email: 'carlos.silva@gmail.com',
+    user_metadata: { full_name: 'Carlos Silva' }
+  });
+  assert.strictEqual(externalUser.isCouple, false);
+  assert.notStrictEqual(externalUser.householdCode, 'casal_eveli_vital', 'Visitante nunca pode receber o código do casal');
+  assert.ok(externalUser.householdCode.startsWith('conta_'), 'Deve gerar código de conta isolada');
+  assert.strictEqual(externalUser.person, 'Carlos Silva');
+
+  // 3. Os dados iniciais dessa outra pessoa começam 100% zerados (R$ 0,00 e 0 transações)
+  const externalData = ctx.loadState(externalUser.householdCode, externalUser.person);
+  assert.strictEqual(externalData.transactions.length, 0, 'Conta externa deve iniciar com 0 transações');
+  assert.strictEqual(externalData.dailyExpenses.length, 0, 'Conta externa deve iniciar com 0 despesas diárias');
+  assert.strictEqual(externalData.uploadedFiles.length, 0, 'Conta externa deve iniciar com 0 arquivos');
+  assert.strictEqual(externalData.futureGoals.length, 0, 'Conta externa deve iniciar com 0 metas do casal');
+  assert.strictEqual(externalData.periodStartingBalances['2026-09'].amount, 0, 'Saldo inicial Set/26 deve ser R$ 0,00');
+  assert.strictEqual(externalData.periodStartingBalances['2026-10'].amount, 0, 'Saldo inicial Out/26 deve ser R$ 0,00');
+  assert.strictEqual(externalData.savingsAccounts.tesouro_direto.monthlyData['2026-10'].balance, 0, 'Tesouro Direto externo deve iniciar em R$ 0,00');
+  assert.strictEqual(externalData.savingsAccounts.poupanca_itau.monthlyData['2026-10'].balance, 0, 'Poupança Itaú externa deve iniciar em R$ 0,00');
 });
 
 console.log(`\n🎉 Resultado Final: ${passed} testes aprovados com sucesso!`);

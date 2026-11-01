@@ -165,3 +165,58 @@ function restoreCollapsibleCardsState() {
   applyCollapsibleCardState('newGoalFormContainer', 'newGoalFormChevron', 'goals_form', false);
 }
 
+// ============================================================================
+// PROTEÇÃO DE INTEGRIDADE (DOCUMENTOS ENVIADOS E MESES ANTERIORES IMUTÁVEIS)
+// ============================================================================
+// Regra de Produção:
+// • O usuário nunca pode apagar/zerar o banco de dados pela interface.
+// • Documentos enviados da Conta (.OFX) e dos Cartões (.PDF) e seus lançamentos
+//   são protegidos (somente leitura na tela; alterações apenas pelo dev via terminal).
+// • Informações de meses anteriores consolidados ou encerrados também são protegidas.
+// • O usuário pode editar/excluir apenas lançamentos manuais do mês vigente/aberto.
+
+function isPeriodLockedForUser(period, stateRef) {
+  if (!period || period === 'ALL') return false;
+  const st = stateRef || (typeof state !== 'undefined' ? state : null);
+  // Meses anteriores a Outubro/2026 ou meses já encerrados em monthlySnapshots são imutáveis na interface
+  if (String(period) < '2026-10') return true;
+  if (st && st.monthlySnapshots && st.monthlySnapshots[period]) return true;
+  return false;
+}
+
+function isTransactionProtected(tx, stateRef) {
+  if (!tx) return true;
+  if (isPeriodLockedForUser(tx.period, stateRef)) return true;
+  if (tx.fileId || tx.fitId || tx.isAutoProjected) return true;
+
+  const idStr = String(tx.id || '');
+  if (
+    idStr.startsWith('imp_') ||
+    idStr.startsWith('set_') ||
+    idStr.startsWith('out_') ||
+    idStr.startsWith('fc_')
+  ) {
+    return true;
+  }
+
+  // Lançamentos criados manualmente pelo usuário possuem prefixo manual ou flag isManual
+  const isManualId =
+    tx.isManual === true ||
+    idStr.startsWith('bank_') ||
+    idStr.startsWith('card_tx_') ||
+    idStr.startsWith('m_') ||
+    idStr.startsWith('goal_tx_') ||
+    idStr.startsWith('inv_pay_');
+
+  return !isManualId;
+}
+
+function isUploadedFileProtected(file, stateRef) {
+  if (!file) return true;
+  // Documentos enviados da conta (.OFX) e do cartão (.PDF) são sempre protegidos contra exclusão pelo usuário
+  if (file.fileType === 'bank_ofx' || file.fileType === 'card_pdf') return true;
+  if (isPeriodLockedForUser(file.period, stateRef)) return true;
+  return false;
+}
+
+

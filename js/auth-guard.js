@@ -176,7 +176,75 @@ function suggestStrongPassword(targetInputId = 'loginPasswordInput') {
 }
 
 // ----------------------------------------------------------------------------
-// CONTROLE DE MODOS DE LOGIN (ENTRAR / CRIAR CONTA / RECUPERAR / PIN)
+// ISOLAMENTO MULTI-CONTA: IDENTIFICA SE É O CASAL (ÉVELI & VITAL) OU OUTRO USUÁRIO
+// ----------------------------------------------------------------------------
+function isAuthorizedCoupleUser(email = '', fullName = '', metaHousehold = '', customHousehold = '') {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  const cleanName = String(fullName || '').trim().toLowerCase();
+  const coupleCode = typeof COUPLE_HOUSEHOLD_CODE !== 'undefined' ? COUPLE_HOUSEHOLD_CODE : 'casal_eveli_vital';
+
+  if (metaHousehold === coupleCode || customHousehold === coupleCode) return true;
+
+  const allowedList = (typeof window !== 'undefined' && window.SUPABASE_CONFIG && Array.isArray(window.SUPABASE_CONFIG.coupleEmails))
+    ? window.SUPABASE_CONFIG.coupleEmails.map(e => String(e).toLowerCase())
+    : [];
+  if (cleanEmail && allowedList.includes(cleanEmail)) return true;
+
+  if (
+    cleanEmail.includes('eveli') ||
+    cleanEmail.includes('vital') ||
+    cleanName.includes('eveli') ||
+    cleanName.includes('éveli') ||
+    cleanName.includes('vital')
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function resolveUserHouseholdAndProfile(user, customHouseholdInput = '', fallbackEmail = '', fallbackName = '') {
+  const email = String(user?.email || fallbackEmail || '').trim();
+  const lowerEmail = email.toLowerCase();
+  const meta = (user && user.user_metadata) ? user.user_metadata : {};
+  const rawName = String(fallbackName || meta.full_name || meta.name || meta.person || '').trim();
+  const metaHousehold = String(meta.household_code || '').trim();
+  const customHousehold = String(customHouseholdInput || '').trim();
+  const coupleCode = typeof COUPLE_HOUSEHOLD_CODE !== 'undefined' ? COUPLE_HOUSEHOLD_CODE : 'casal_eveli_vital';
+
+  // 1. Verifica se pertence à conta oficial da Éveli e do Vital
+  if (isAuthorizedCoupleUser(lowerEmail, rawName, metaHousehold, customHousehold)) {
+    const isVital = lowerEmail.includes('vital') || rawName.toLowerCase().includes('vital');
+    return {
+      person: isVital ? 'Vital' : 'Éveli',
+      householdCode: coupleCode,
+      isCouple: true
+    };
+  }
+
+  // 2. Qualquer outra pessoa entra em uma conta 100% isolada e começa do zero
+  const safeId = typeof sanitizeId === 'function'
+    ? sanitizeId(
+        customHousehold ||
+        (metaHousehold && metaHousehold !== coupleCode ? metaHousehold : '') ||
+        user?.id ||
+        lowerEmail ||
+        'novo_usuario'
+      )
+    : String(user?.id || lowerEmail || 'novo_usuario').replace(/[^A-Za-z0-9_.\-]/g, '_');
+
+  const isolatedHousehold = safeId.startsWith('conta_') ? safeId : `conta_${safeId}`;
+  const displayPerson = rawName || (email ? email.split('@')[0] : 'Titular');
+
+  return {
+    person: displayPerson,
+    householdCode: isolatedHousehold,
+    isCouple: false
+  };
+}
+
+// ----------------------------------------------------------------------------
+// CONTROLE DE MODOS DE LOGIN (ENTRAR / CRIAR CONTA / RECUPERAR)
 // ----------------------------------------------------------------------------
 function setAuthMode(mode) {
   authState.authMode = mode;
@@ -189,21 +257,23 @@ function setAuthMode(mode) {
   const rememberField = document.getElementById('loginRememberField');
   const googleBtnBox = document.getElementById('loginGoogleBtnBox');
   const submitBtnText = document.getElementById('loginSubmitBtnText');
+  const strengthContainer = document.getElementById('passwordStrengthContainer');
+  const btnSuggestPwd = document.getElementById('btnSuggestStrongPassword');
+  const suggestPwdDot = document.getElementById('suggestPwdSeparatorDot');
+  const btnForgotPwd = document.getElementById('btnForgotPasswordLink');
 
   const tabSignIn = document.getElementById('authTabBtnSignIn');
   const tabSignUp = document.getElementById('authTabBtnSignUp');
-  const tabPin = document.getElementById('authTabBtnPin');
 
   const updateTabClass = (btn, active) => {
     if (!btn) return;
     btn.className = active
-      ? 'flex-1 py-1.5 px-2 rounded-xl text-xs font-bold bg-sky-600 text-white shadow-sm transition'
-      : 'flex-1 py-1.5 px-2 rounded-xl text-xs font-medium text-slate-400 hover:text-slate-200 transition';
+      ? 'flex-1 py-2 px-3 rounded-xl text-xs font-bold bg-sky-600 text-white shadow-sm transition cursor-pointer'
+      : 'flex-1 py-2 px-3 rounded-xl text-xs font-medium text-slate-400 hover:text-slate-200 transition cursor-pointer';
   };
 
   updateTabClass(tabSignIn, mode === 'signin');
   updateTabClass(tabSignUp, mode === 'signup');
-  updateTabClass(tabPin, mode === 'pin');
 
   // Reseta visibilidade dos campos
   if (nameField) nameField.classList.add('hidden');
@@ -216,19 +286,23 @@ function setAuthMode(mode) {
   if (mode === 'signup') {
     if (nameField) nameField.classList.remove('hidden');
     if (householdField) householdField.classList.remove('hidden');
-    if (submitBtnText) submitBtnText.textContent = 'Criar Minha Conta ✨';
+    if (strengthContainer) strengthContainer.classList.remove('hidden');
+    if (btnSuggestPwd) btnSuggestPwd.classList.remove('hidden');
+    if (suggestPwdDot) suggestPwdDot.classList.add('hidden');
+    if (btnForgotPwd) btnForgotPwd.classList.add('hidden');
+    if (submitBtnText) submitBtnText.textContent = 'Criar Minha Conta do Zero ✨';
   } else if (mode === 'recovery') {
     if (passwordField) passwordField.classList.add('hidden');
     if (rememberField) rememberField.classList.add('hidden');
     if (googleBtnBox) googleBtnBox.classList.add('hidden');
     if (submitBtnText) submitBtnText.textContent = 'Enviar Link de Recuperação 📧';
-  } else if (mode === 'pin') {
-    if (emailField) emailField.classList.add('hidden');
-    if (googleBtnBox) googleBtnBox.classList.add('hidden');
-    if (submitBtnText) submitBtnText.textContent = 'Desbloquear com PIN 🔓';
   } else {
-    // signin padrão
-    if (submitBtnText) submitBtnText.textContent = 'Entrar no Sistema 🚀';
+    // signin padrão (tela limpa, sem barras de força de senha)
+    if (strengthContainer) strengthContainer.classList.add('hidden');
+    if (btnSuggestPwd) btnSuggestPwd.classList.add('hidden');
+    if (suggestPwdDot) suggestPwdDot.classList.add('hidden');
+    if (btnForgotPwd) btnForgotPwd.classList.remove('hidden');
+    if (submitBtnText) submitBtnText.textContent = 'Entrar';
   }
 
   const feedback = document.getElementById('loginFeedbackMsg');
@@ -245,14 +319,14 @@ async function loginWithGoogleOAuth() {
     return;
   }
 
-  showLoginFeedback('Conectando ao Google com segurança...', 'info');
+  showLoginFeedback('Redirecionando para o Google com segurança...', 'info');
 
   try {
     const redirectTo = (typeof window !== 'undefined' && window.location)
       ? window.location.origin + window.location.pathname
       : undefined;
 
-    const { data, error } = await client.auth.signInWithOAuth({
+    const { error } = await client.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo,
@@ -317,10 +391,12 @@ function getStoredSession() {
   return null;
 }
 
-function saveSession(person, rememberMe) {
+function saveSession(person, rememberMe, householdCode, email) {
   const durationMs = rememberMe ? (30 * 24 * 60 * 60 * 1000) : (8 * 60 * 60 * 1000); // 30 dias ou 8 horas
   const session = {
     person,
+    householdCode: householdCode || (typeof cloudConfig !== 'undefined' ? cloudConfig.householdCode : 'casal_eveli_vital'),
+    email: email || (typeof cloudConfig !== 'undefined' ? cloudConfig.loggedEmail : ''),
     rememberMe,
     createdAt: Date.now(),
     expiresAt: Date.now() + durationMs
@@ -342,11 +418,45 @@ function clearSession() {
 }
 
 // ----------------------------------------------------------------------------
-// INICIALIZAÇÃO DA PROTEÇÃO DA TELA E OAUTH LISTENER
+// INICIALIZAÇÃO DA PROTEÇÃO DA TELA E OAUTH LISTENER (SEM PISCAR TELA!)
 // ----------------------------------------------------------------------------
-async function initAuthGuard() {
-  let cfg = getStoredAuthConfig();
+let lastHandledAuthUserId = null;
 
+async function initAuthGuard() {
+  // 1. Verifica IMEDIATAMENTE (de forma síncrona, antes de qualquer await) se já há sessão válida,
+  // evitando que a tela de login pisque ao abrir ou atualizar a página!
+  const activeSession = getStoredSession();
+  if (activeSession && activeSession.person) {
+    if (typeof cloudConfig !== 'undefined') {
+      if (activeSession.householdCode) cloudConfig.householdCode = activeSession.householdCode;
+      if (activeSession.email) cloudConfig.loggedEmail = activeSession.email;
+      cloudConfig.loggedPerson = activeSession.person;
+      if (typeof saveCloudConfig === 'function') saveCloudConfig();
+    }
+    if (typeof switchActiveHouseholdState === 'function' && activeSession.householdCode) {
+      switchActiveHouseholdState(activeSession.householdCode, activeSession.person);
+    }
+    unlockApp(activeSession.person, false);
+  } else {
+    lockAppScreen();
+  }
+
+  // 2. Preenche o último e-mail lembrado se existir
+  const emailInput = typeof document !== 'undefined' ? document.getElementById('loginEmailInput') : null;
+  if (emailInput && typeof cloudConfig !== 'undefined' && cloudConfig.loggedEmail) {
+    emailInput.value = cloudConfig.loggedEmail;
+  }
+
+  // 3. Configura o ouvinte oficial do Supabase Auth para Google OAuth
+  setupSupabaseAuthListener();
+
+  // 4. Se já estava desbloqueado, sincroniza silenciosamente em background
+  if (authState.isUnlocked && typeof pullStateFromSupabaseCloud === 'function') {
+    pullStateFromSupabaseCloud(true);
+  }
+
+  // 5. Inicializa hash local padrão em segundo plano caso ainda não exista
+  let cfg = getStoredAuthConfig();
   if (!cfg || !cfg.passwordHash) {
     const defaultHash = await generateSha256Hash('123456', DEFAULT_SALT);
     cfg = {
@@ -360,28 +470,6 @@ async function initAuthGuard() {
     };
     saveStoredAuthConfig(cfg);
   }
-
-  // Preenche o último e-mail lembrado se existir
-  const emailInput = document.getElementById('loginEmailInput');
-  if (emailInput && typeof cloudConfig !== 'undefined' && cloudConfig.loggedEmail) {
-    emailInput.value = cloudConfig.loggedEmail;
-  }
-
-  // Configura o ouvinte oficial do Supabase Auth para Google e Magic Link
-  setupSupabaseAuthListener();
-
-  // Verifica se já existe sessão válida ativa
-  const activeSession = getStoredSession();
-  if (activeSession && activeSession.person) {
-    unlockApp(activeSession.person, false);
-    if (typeof pullStateFromSupabaseCloud === 'function') {
-      pullStateFromSupabaseCloud(true);
-    }
-    return;
-  }
-
-  // Se não há sessão válida, bloqueia a tela e exibe login
-  lockAppScreen();
 }
 
 function setupSupabaseAuthListener() {
@@ -389,27 +477,47 @@ function setupSupabaseAuthListener() {
   if (!client || !client.auth || !client.auth.onAuthStateChange) return;
 
   client.auth.onAuthStateChange(async (event, session) => {
-    if (event === 'SIGNED_IN' && session && session.user) {
+    if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session && session.user) {
       const email = session.user.email || '';
-      const meta = session.user.user_metadata || {};
-      const person = meta.full_name || meta.name || meta.person || (email.toLowerCase().includes('vital') ? 'Vital' : (email.toLowerCase().includes('eveli') ? 'Éveli' : email.split('@')[0]));
-      const household = meta.household_code || (typeof cloudConfig !== 'undefined' ? cloudConfig.householdCode : 'casal_eveli_vital') || 'casal_eveli_vital';
+      const resolved = resolveUserHouseholdAndProfile(session.user);
+
+      // Se a tela já está desbloqueada para este mesmo usuário e mesma conta, ignora para não piscar a tela!
+      if (
+        authState.isUnlocked &&
+        lastHandledAuthUserId === session.user.id &&
+        typeof cloudConfig !== 'undefined' &&
+        cloudConfig.householdCode === resolved.householdCode
+      ) {
+        return;
+      }
+
+      lastHandledAuthUserId = session.user.id;
+      const previousHousehold = typeof cloudConfig !== 'undefined' ? cloudConfig.householdCode : null;
 
       if (typeof cloudConfig !== 'undefined') {
         cloudConfig.loggedEmail = email;
-        cloudConfig.loggedPerson = person;
-        cloudConfig.householdCode = household;
+        cloudConfig.loggedPerson = resolved.person;
+        cloudConfig.householdCode = resolved.householdCode;
         if (typeof saveCloudConfig === 'function') saveCloudConfig();
       }
 
-      saveSession(person, true);
-      unlockApp(person, true);
+      if (typeof switchActiveHouseholdState === 'function' && previousHousehold !== resolved.householdCode) {
+        switchActiveHouseholdState(resolved.householdCode, resolved.person);
+      }
+
+      const wasUnlocked = authState.isUnlocked;
+      saveSession(resolved.person, true, resolved.householdCode, email);
+      unlockApp(resolved.person, !wasUnlocked);
 
       if (typeof pullStateFromSupabaseCloud === 'function') {
         pullStateFromSupabaseCloud(true);
       }
     } else if (event === 'SIGNED_OUT') {
-      lockAppScreen();
+      // Só bloqueia se realmente havia uma sessão Supabase ativa sendo encerrada
+      if (lastHandledAuthUserId !== null) {
+        lastHandledAuthUserId = null;
+        lockAppScreen();
+      }
     }
   });
 }
@@ -430,7 +538,6 @@ function lockAppScreen() {
   const pwdInput = document.getElementById('loginPasswordInput');
   if (pwdInput) {
     pwdInput.value = '';
-    setTimeout(() => pwdInput.focus(), 100);
   }
 
   const feedback = document.getElementById('loginFeedbackMsg');
@@ -470,41 +577,14 @@ function unlockApp(person, recordAudit = true) {
 }
 
 // ----------------------------------------------------------------------------
-// SELEÇÃO DE PERFIL NA TELA DE LOGIN (ÉVELI OU VITAL)
+// SELEÇÃO DE PERFIL NA TELA DE LOGIN
 // ----------------------------------------------------------------------------
 function selectLoginProfile(person) {
   authState.selectedPerson = person;
-  const btnEveli = document.getElementById('loginProfileBtnEveli');
-  const btnVital = document.getElementById('loginProfileBtnVital');
-  const avatarEl = document.getElementById('loginAvatarDisplay');
-  const welcomeText = document.getElementById('loginWelcomeGreeting');
-
-  if (person === 'Vital') {
-    if (btnVital) {
-      btnVital.className = 'flex-1 py-2.5 px-3 rounded-2xl font-bold text-xs bg-sky-600 text-white shadow-md shadow-sky-600/20 border-2 border-sky-400 flex items-center justify-center gap-2 transition';
-    }
-    if (btnEveli) {
-      btnEveli.className = 'flex-1 py-2.5 px-3 rounded-2xl font-semibold text-xs bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border border-slate-700 flex items-center justify-center gap-2 transition';
-    }
-    if (avatarEl) avatarEl.textContent = '👨‍💼';
-    if (welcomeText) welcomeText.textContent = 'Olá, Vital!';
-  } else {
-    if (btnEveli) {
-      btnEveli.className = 'flex-1 py-2.5 px-3 rounded-2xl font-bold text-xs bg-sky-600 text-white shadow-md shadow-sky-600/20 border-2 border-sky-400 flex items-center justify-center gap-2 transition';
-    }
-    if (btnVital) {
-      btnVital.className = 'flex-1 py-2.5 px-3 rounded-2xl font-semibold text-xs bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border border-slate-700 flex items-center justify-center gap-2 transition';
-    }
-    if (avatarEl) avatarEl.textContent = '👩‍💼';
-    if (welcomeText) welcomeText.textContent = 'Olá, Éveli!';
-  }
-
-  const pwdInput = document.getElementById('loginPasswordInput');
-  if (pwdInput) pwdInput.focus();
 }
 
 // ----------------------------------------------------------------------------
-// PROCESSAMENTO DO FORMULÁRIO DE LOGIN (EMAIL, SENHA, SUPABASE & PIN)
+// PROCESSAMENTO DO FORMULÁRIO DE LOGIN (EMAIL, SENHA E SUPABASE)
 // ----------------------------------------------------------------------------
 async function submitAppLogin(e) {
   if (e && e.preventDefault) e.preventDefault();
@@ -546,7 +626,7 @@ async function submitAppLogin(e) {
     return;
   }
 
-  // 2. MODO CADASTRO (SIGN UP)
+  // 2. MODO CADASTRO (SIGN UP) — NOVOS USUÁRIOS COMEÇAM EM CONTA ZERADA PRÓPRIA
   if (mode === 'signup') {
     const nameInput = document.getElementById('loginNameInput');
     const householdInput = document.getElementById('loginHouseholdInput');
@@ -554,7 +634,7 @@ async function submitAppLogin(e) {
     const customHousehold = householdInput ? householdInput.value.trim() : '';
 
     if (!name) {
-      showLoginFeedback('Por favor, informe seu nome para o perfil.', 'warning');
+      showLoginFeedback('Por favor, informe seu nome.', 'warning');
       if (nameInput) nameInput.focus();
       return;
     }
@@ -569,20 +649,21 @@ async function submitAppLogin(e) {
       return;
     }
 
-    const resolvedHousehold = customHousehold || (typeof cloudConfig !== 'undefined' ? cloudConfig.householdCode : 'casal_eveli_vital') || 'casal_eveli_vital';
+    // Se a pessoa não informou o código privado do casal, cria um código exclusivo e isolado do zero!
+    const resolved = resolveUserHouseholdAndProfile(null, customHousehold, email, name);
 
     const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
     if (client) {
-      showLoginFeedback('Criando sua conta na nuvem...', 'info');
+      showLoginFeedback('Criando sua conta isolada na nuvem...', 'info');
       try {
-        const { data, error } = await client.auth.signUp({
+        const { error } = await client.auth.signUp({
           email,
           password,
           options: {
             data: {
               full_name: name,
-              person: name,
-              household_code: resolvedHousehold
+              person: resolved.person,
+              household_code: resolved.householdCode
             }
           }
         });
@@ -590,9 +671,13 @@ async function submitAppLogin(e) {
 
         if (typeof cloudConfig !== 'undefined') {
           cloudConfig.loggedEmail = email;
-          cloudConfig.loggedPerson = name;
-          cloudConfig.householdCode = resolvedHousehold;
+          cloudConfig.loggedPerson = resolved.person;
+          cloudConfig.householdCode = resolved.householdCode;
           if (typeof saveCloudConfig === 'function') saveCloudConfig();
+        }
+
+        if (typeof switchActiveHouseholdState === 'function') {
+          switchActiveHouseholdState(resolved.householdCode, resolved.person);
         }
 
         showLoginFeedback(`Conta criada com sucesso para ${name}! Você já pode entrar.`, 'success');
@@ -606,7 +691,7 @@ async function submitAppLogin(e) {
     return;
   }
 
-  // 3. MODO LOGIN POR EMAIL & SENHA OU PIN LOCAL
+  // 3. MODO LOGIN POR EMAIL & SENHA
   if (!password) {
     showLoginFeedback('Por favor, digite sua senha de acesso.', 'warning');
     if (pwdInput) pwdInput.focus();
@@ -615,7 +700,7 @@ async function submitAppLogin(e) {
 
   // Se tiver e-mail preenchido e cliente Supabase ativo, autentica na nuvem
   const client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null;
-  if (email && email.includes('@') && client && mode !== 'pin') {
+  if (email && email.includes('@') && client) {
     showLoginFeedback('Autenticando com segurança...', 'info');
     try {
       const { data, error } = await client.auth.signInWithPassword({
@@ -624,27 +709,26 @@ async function submitAppLogin(e) {
       });
 
       if (!error && data && data.user) {
-        // SUCESSO VIA SUPABASE AUTH!
-        const meta = data.user.user_metadata || {};
-        const resolvedPerson = meta.full_name || meta.name || meta.person || (email.toLowerCase().includes('vital') ? 'Vital' : (email.toLowerCase().includes('eveli') ? 'Éveli' : email.split('@')[0]));
-        const resolvedHousehold = meta.household_code || (typeof cloudConfig !== 'undefined' ? cloudConfig.householdCode : 'casal_eveli_vital') || 'casal_eveli_vital';
+        const resolved = resolveUserHouseholdAndProfile(data.user, '', email);
 
         if (typeof cloudConfig !== 'undefined') {
           cloudConfig.loggedEmail = email;
-          cloudConfig.loggedPerson = resolvedPerson;
-          cloudConfig.householdCode = resolvedHousehold;
+          cloudConfig.loggedPerson = resolved.person;
+          cloudConfig.householdCode = resolved.householdCode;
           if (typeof saveCloudConfig === 'function') saveCloudConfig();
         }
 
-        saveSession(resolvedPerson, rememberMe);
-        showLoginFeedback(`Bem-vindo(a), ${resolvedPerson}! Acesso liberado.`, 'success');
+        if (typeof switchActiveHouseholdState === 'function') {
+          switchActiveHouseholdState(resolved.householdCode, resolved.person);
+        }
 
-        setTimeout(() => {
-          unlockApp(resolvedPerson, true);
-          if (typeof pullStateFromSupabaseCloud === 'function') {
-            pullStateFromSupabaseCloud(true);
-          }
-        }, 300);
+        saveSession(resolved.person, rememberMe, resolved.householdCode, email);
+        showLoginFeedback(`Bem-vindo(a), ${resolved.person}!`, 'success');
+
+        unlockApp(resolved.person, true);
+        if (typeof pullStateFromSupabaseCloud === 'function') {
+          pullStateFromSupabaseCloud(true);
+        }
         return;
       }
     } catch (err) {
@@ -662,22 +746,27 @@ async function submitAppLogin(e) {
   const enteredHash = await generateSha256Hash(password, cfg.salt || DEFAULT_SALT);
 
   if (enteredHash === cfg.passwordHash) {
-    // SUCESSO LOCAL!
     cfg.failedAttempts = 0;
     cfg.lockoutUntil = 0;
     saveStoredAuthConfig(cfg);
 
-    if (email && typeof cloudConfig !== 'undefined') {
-      cloudConfig.loggedEmail = email;
+    const resolved = resolveUserHouseholdAndProfile(null, '', email || 'eveli@casal.local', authState.selectedPerson);
+
+    if (typeof cloudConfig !== 'undefined') {
+      if (email) cloudConfig.loggedEmail = email;
+      cloudConfig.loggedPerson = resolved.person;
+      cloudConfig.householdCode = resolved.householdCode;
       if (typeof saveCloudConfig === 'function') saveCloudConfig();
     }
 
-    saveSession(authState.selectedPerson, rememberMe);
+    if (typeof switchActiveHouseholdState === 'function') {
+      switchActiveHouseholdState(resolved.householdCode, resolved.person);
+    }
+
+    saveSession(resolved.person, rememberMe, resolved.householdCode, email);
     showLoginFeedback('Acesso liberado com sucesso!', 'success');
 
-    setTimeout(() => {
-      unlockApp(authState.selectedPerson, true);
-    }, 250);
+    unlockApp(resolved.person, true);
   } else {
     // SENHA INCORRETA: Proteção contra força bruta
     cfg.failedAttempts = (cfg.failedAttempts || 0) + 1;

@@ -5,8 +5,8 @@
 // Isola a leitura de arquivos externos, classificação automática de categorias,
 // prevenção de lançamentos duplicados e exportação/restauração de backups.
 
-if (typeof window !== 'undefined' && window.pdfjsLib) {
-  window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+if (typeof window !== 'undefined' && window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions) {
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'js/pdf.worker.min.js';
 }
 
 function openBackupModal() {
@@ -49,12 +49,26 @@ function importBackupJsonFile(event) {
       }
       // Segurança: higieniza o arquivo antes de aceitar (ids, tipos e valores)
       const newState = sanitizeState(candidate);
+
+      // Preserva lançamentos e documentos oficiais já protegidos na base para impedir perda acidental
+      const currentProtectedTx = (state.transactions || []).filter(t => !t.isAutoProjected && typeof isTransactionProtected === 'function' && isTransactionProtected(t));
+      const newTxIds = new Set(newState.transactions.map(t => t.id));
+      currentProtectedTx.forEach(pt => {
+        if (!newTxIds.has(pt.id)) newState.transactions.push(pt);
+      });
+
+      const currentProtectedFiles = (state.uploadedFiles || []).filter(f => typeof isUploadedFileProtected === 'function' && isUploadedFileProtected(f));
+      const newFileIds = new Set((newState.uploadedFiles || []).map(f => f.id));
+      currentProtectedFiles.forEach(pf => {
+        if (!newFileIds.has(pf.id)) newState.uploadedFiles.push(pf);
+      });
+
       newState.transactions = enrichTransactionsAndProjectInstallments(newState.transactions);
       state = newState;
       saveState();
       renderAll();
       closeBackupModal();
-      alert(`✅ Backup restaurado com sucesso! (${state.transactions.length} lançamentos carregados).`);
+      alert(`✅ Backup restaurado e mesclado com proteção de histórico! (${state.transactions.length} lançamentos ativos).`);
     } catch (err) {
       alert('Erro ao ler o arquivo de backup .JSON.');
     }
@@ -107,31 +121,14 @@ function exportTransactionsCsv() {
 }
 
 function resetRealData() {
-  if (!confirm('Deseja zerar os lançamentos e começar com a base 100% limpa (R$ 0,00) para inserir ou importar seus extratos e notas?')) return;
-  const fresh = getInitialFamilyData();
-  fresh.transactions = [];
-  fresh.dailyExpenses = [];
-  fresh.uploadedFiles = [];
-  fresh.importedSources = [];
-  fresh.periodStartingBalances = {
-    '2026-09': { amount: 0, label: 'Saldo Inicial (Setembro/2026)' },
-    '2026-10': { amount: 0, label: 'Saldo Inicial (Outubro/2026)' },
-    'ALL':     { amount: 0, label: 'Saldo Inicial' }
-  };
-  if (fresh.cardsConfig?.card_eveli_5544) {
-    fresh.cardsConfig.card_eveli_5544.officialInvoiceTotals = {};
+  if (typeof alert === 'function') {
+    alert(
+      '🔒 Operação Bloqueada por Segurança!\n\n' +
+      'O apagamento total do banco de dados está desativado no modo de produção.\n' +
+      'Os documentos enviados (Conta e Cartão) e o histórico de meses anteriores só podem ser gerenciados pelo desenvolvedor via terminal.'
+    );
   }
-  if (fresh.cardsConfig?.card_marido) {
-    fresh.cardsConfig.card_marido.officialInvoiceTotals = {};
-  }
-  state = fresh;
-  saveState();
-  if (typeof pushStateToSupabaseCloud === 'function') {
-    pushStateToSupabaseCloud(true);
-  }
-  renderAll();
-  closeBackupModal();
-  alert('✨ Sistema zerado com sucesso! Saldo inicial R$ 0,00, pronto para novos lançamentos e importações a partir de Setembro/2026.');
+  return false;
 }
 
 function classifyItemCategory(desc, isIncome, isCard) {
