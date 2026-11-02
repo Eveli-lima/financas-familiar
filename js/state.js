@@ -314,6 +314,65 @@ function sanitizeState(raw, householdOverride) {
 
   // Vida financeira começa a partir de Setembro/2026 (meses anteriores desconsiderados)
   clean.transactions = clean.transactions.filter(t => String(t.period) >= '2026-09');
+
+  // Sincronização Canônica dos 4 Documentos Oficiais do Casal (Notebook + Celular + Nuvem):
+  // Se o estado do casal vier da semente antiga parcial (cc_1, fc_p1, set_1) ou de importações locais avulsas (imp_...),
+  // unifica automaticamente para os 201 lançamentos oficiais e 4 arquivos oficiais, preservando lançamentos manuais.
+  if (
+    coupleMode &&
+    typeof baseTransactions !== 'undefined' &&
+    Array.isArray(baseTransactions) &&
+    clean.transactions.length > 0
+  ) {
+    const officialFileNames = new Set([
+      'fat-out.pdf',
+      'fat-set.pdf',
+      'Extrato Conta Corrente-011120262136.ofx',
+      'Extrato Conta Corrente-011120262135.ofx'
+    ]);
+    const hasLegacySeed = clean.transactions.some(t =>
+      /^(cc_\d+|fc_(p|l|m|u|s|o)\d+|fc_sep_(p|v)\d+|set_\d+)$/.test(String(t.id))
+    );
+    const hasUnlinkedOfficialImports = clean.transactions.some(t =>
+      /^imp_(ofx|pdf)_/.test(String(t.id)) && (t.period === '2026-09' || t.period === '2026-10')
+    );
+    const isFullHouseholdState = clean.transactions.length >= 20 || hasLegacySeed || hasUnlinkedOfficialImports;
+
+    if (isFullHouseholdState) {
+      const canonicalTx = baseTransactions.map(t => ({ ...t }));
+      const canonicalIds = new Set(canonicalTx.map(t => t.id));
+      const txSig = (t) => {
+        const amt = typeof toCents === 'function' ? toCents(t.amount) : Math.round((Number(t.amount) || 0) * 100);
+        const normDesc = String(t.desc || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 18);
+        return `${t.accountId || ''}|${t.period || ''}|${t.type || ''}|${t.date || ''}|${amt}|${normDesc}`;
+      };
+      const canonicalSigs = new Set(canonicalTx.map(txSig));
+
+      const extraUserTx = clean.transactions.filter(t => {
+        if (t.isAutoProjected) return false;
+        if (canonicalIds.has(t.id)) return false;
+        if (/^(cc_\d+|fc_(p|l|m|u|s|o)\d+|fc_sep_(p|v)\d+|set_\d+)$/.test(String(t.id))) return false;
+        if (/^imp_(ofx|pdf)_/.test(String(t.id)) && (t.period === '2026-09' || t.period === '2026-10')) return false;
+        if (t.fileName && officialFileNames.has(t.fileName)) return false;
+        if (!t.isManual && canonicalSigs.has(txSig(t))) return false;
+        return true;
+      });
+
+      clean.transactions = [...canonicalTx, ...extraUserTx];
+
+      if (typeof OFFICIAL_COUPLE_UPLOADED_FILES !== 'undefined' && Array.isArray(OFFICIAL_COUPLE_UPLOADED_FILES)) {
+        const canonicalFileIds = new Set(OFFICIAL_COUPLE_UPLOADED_FILES.map(f => f.id));
+        const extraFiles = (clean.uploadedFiles || []).filter(f =>
+          !canonicalFileIds.has(f.id) && !officialFileNames.has(f.fileName)
+        );
+        clean.uploadedFiles = [
+          ...OFFICIAL_COUPLE_UPLOADED_FILES.map(f => ({ ...f })),
+          ...extraFiles
+        ];
+      }
+    }
+  }
+
   if (clean.periodStartingBalances) {
     delete clean.periodStartingBalances['2026-08'];
     // Garante que apenas Setembro/2026 (2026-09) possa ter override manual; outros meses são 100% automáticos

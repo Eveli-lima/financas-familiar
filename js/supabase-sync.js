@@ -404,26 +404,39 @@ function mergeProtectedItemsIntoTarget(targetState, sourceState) {
   if (!Array.isArray(targetState.uploadedFiles)) targetState.uploadedFiles = [];
   if (!Array.isArray(targetState.importedSources)) targetState.importedSources = [];
 
+  const txSignature = (t) => {
+    const amt = typeof toCents === 'function' ? toCents(t.amount) : Math.round((Number(t.amount) || 0) * 100);
+    const normDesc = String(t.desc || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 20);
+    return `${t.accountId || ''}|${t.period || ''}|${t.type || ''}|${t.date || ''}|${amt}|${normDesc}`;
+  };
+
   const targetTxIds = new Set(targetState.transactions.map(t => t.id));
+  const targetTxSigs = new Set(targetState.transactions.map(txSignature));
   const sourceProtectedTx = (sourceState.transactions || []).filter(
     t => !t.isAutoProjected && typeof isTransactionProtected === 'function' && isTransactionProtected(t)
   );
   sourceProtectedTx.forEach(pt => {
-    if (!targetTxIds.has(pt.id)) {
+    const sig = txSignature(pt);
+    if (!targetTxIds.has(pt.id) && !targetTxSigs.has(sig)) {
       targetState.transactions.push(pt);
       targetTxIds.add(pt.id);
+      targetTxSigs.add(sig);
       addedAny = true;
     }
   });
 
+  const fileSignature = (f) => `${String(f.fileName || '').toLowerCase()}|${f.period || ''}|${f.fileType || ''}`;
   const targetFileIds = new Set(targetState.uploadedFiles.map(f => f.id));
+  const targetFileSigs = new Set(targetState.uploadedFiles.map(fileSignature));
   const sourceProtectedFiles = (sourceState.uploadedFiles || []).filter(
     f => typeof isUploadedFileProtected === 'function' && isUploadedFileProtected(f)
   );
   sourceProtectedFiles.forEach(pf => {
-    if (!targetFileIds.has(pf.id)) {
+    const fSig = fileSignature(pf);
+    if (!targetFileIds.has(pf.id) && !targetFileSigs.has(fSig)) {
       targetState.uploadedFiles.push(pf);
       targetFileIds.add(pf.id);
+      targetFileSigs.add(fSig);
       addedAny = true;
     }
   });

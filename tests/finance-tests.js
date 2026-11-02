@@ -106,22 +106,22 @@ runTest('1. Precisão monetária em centavos inteiros (toCents / fromCents)', ()
   assert.strictEqual(ctx.fromCents(sumCents), 20.3);
 });
 
-runTest('2. Isolamento estrito de cartões: Setembro (Fatura Oficial R$ 3.375,50) e Outubro isolados', () => {
+runTest('2. Isolamento estrito de cartões: Setembro (Fatura Oficial R$ 3.375,50) e Outubro (Fatura Oficial R$ 3.096,11) isolados', () => {
   const sepTx = getState().transactions.filter(t => t.period === '2026-09');
   const octTx = getState().transactions.filter(t => t.period === '2026-10');
   const sumSep = ctx.calculatePeriodSummary(sepTx, '2026-09');
   const sumOct = ctx.calculatePeriodSummary(octTx, '2026-10');
-  assert.strictEqual(sumSep.cardEveliCents, 337550); // Setembro isolado: R$ 3.375,50 (Fatura Oficial do PDF Itaú)
-  assert.strictEqual(sumOct.cardEveliCents, 151352); // Outubro isolado
+  assert.strictEqual(sumSep.cardEveliCents, 337550); // Setembro isolado: R$ 3.375,50 (Fatura Oficial fat-set.pdf)
+  assert.strictEqual(sumOct.cardEveliCents, 309611); // Outubro isolado: R$ 3.096,11 (Fatura Oficial fat-out.pdf)
 });
 
-runTest('3. Saldo final da Conta Conjunta Itaú em Outubro/2026 (-R$ 4,49)', () => {
+runTest('3. Saldo final da Conta Conjunta Itaú em Outubro/2026 (R$ 39,41)', () => {
   const octTx = getState().transactions.filter(t => t.period === '2026-10');
   const sum = ctx.calculatePeriodSummary(octTx, '2026-10');
   assert.strictEqual(sum.prevBalanceCents, 4817);
-  assert.strictEqual(sum.totalIncomeCents, 50000);
-  assert.strictEqual(sum.totalBankDebitCents, 55266);
-  assert.strictEqual(sum.bankEndingBalanceCents, -449);
+  assert.strictEqual(sum.totalIncomeCents, 369001);
+  assert.strictEqual(sum.totalBankDebitCents, 369877);
+  assert.strictEqual(sum.bankEndingBalanceCents, 3941);
 });
 
 runTest('4. Pagamento de fatura reduz saldo bancário sem duplicar despesas do orçamento', () => {
@@ -155,14 +155,14 @@ runTest('5. Projeção automática das parcelas futuras em Nov/26 e Dez/26', () 
   const decTx = getState().transactions.filter(t => t.period === '2026-12');
   const sumNov = ctx.calculatePeriodSummary(novTx, '2026-11');
   const sumDec = ctx.calculatePeriodSummary(decTx, '2026-12');
-  assert.strictEqual(sumNov.totalCardCents, 53730); // R$ 537,30
-  assert.strictEqual(sumDec.totalCardCents, 30758); // R$ 307,58
+  assert.strictEqual(sumNov.totalCardCents, 65537); // R$ 655,37
+  assert.strictEqual(sumDec.totalCardCents, 37247); // R$ 372,47
 });
 
 runTest('6. Radar de Parcelamentos: R$ 411,88 liberados após Outubro/2026', () => {
   const octTx = getState().transactions.filter(t => t.period === '2026-10');
   const radar = ctx.calculateInstallmentsRadar(octTx);
-  assert.strictEqual(radar.installmentTx.length, 12);
+  assert.strictEqual(radar.installmentTx.length, 15);
   assert.strictEqual(radar.endingNow.length, 4);
   assert.strictEqual(radar.endingNowCents, 41188);
 });
@@ -170,10 +170,10 @@ runTest('6. Radar de Parcelamentos: R$ 411,88 liberados após Outubro/2026', () 
 runTest('7. Uso de Limite do Cartão: Fatura + Parcelas Futuras vs. Limite Disponível', () => {
   const lim = ctx.calculateCardLimitsUsage('card_eveli_5544', '2026-10');
   assert.strictEqual(lim.limitCents, 774000);
-  assert.strictEqual(lim.periodInvoiceCents, 151352);
-  assert.strictEqual(lim.futureInstallmentsCents, 225032);
-  assert.strictEqual(lim.totalCommittedCents, 376384);
-  assert.strictEqual(lim.availableLimitCents, 397616);
+  assert.strictEqual(lim.periodInvoiceCents, 309611);
+  assert.strictEqual(lim.futureInstallmentsCents, 259737);
+  assert.strictEqual(lim.totalCommittedCents, 569348);
+  assert.strictEqual(lim.availableLimitCents, 204652);
 });
 
 runTest('8. Conciliação Inteligente de Importação: Deduplicação e detecção de Fatura Itaú', () => {
@@ -227,17 +227,17 @@ runTest('11. Transporte automático de saldo da conta entre meses consecutivos',
     periodStartingBalances: { ...st.periodStartingBalances },
     transactions: [
       ...st.transactions,
-      { id: 'nov_inc_1', period: '2026-11', accountId: 'cc_itau_conjunta', type: 'income', kind: 'income', amount: 1004.49 }
+      { id: 'nov_inc_1', period: '2026-11', accountId: 'cc_itau_conjunta', type: 'income', kind: 'income', amount: 960.59 }
     ]
   };
   const startNovActive = ctx.getStartingBalanceForPeriod('2026-11', mockState);
-  assert.strictEqual(startNovActive.amount, -4.49); // Puxou automaticamente o saldo final de Out/26 (-R$ 4,49)
+  assert.strictEqual(startNovActive.amount, 39.41); // Puxou automaticamente o saldo final de Out/26 (R$ 39,41)
   const sumNovActive = ctx.calculatePeriodSummary(
     mockState.transactions.filter(t => t.period === '2026-11'),
     '2026-11',
     mockState
   );
-  assert.strictEqual(sumNovActive.bankEndingBalanceCents, 100000); // -4,49 + 1004,49 = R$ 1.000,00
+  assert.strictEqual(sumNovActive.bankEndingBalanceCents, 100000); // 39,41 + 960,59 = R$ 1.000,00
 
   // Se Dez/26 também receber lançamento, puxa automaticamente os R$ 1.000,00 finais de Nov/26
   mockState.transactions.push({ id: 'dec_exp_1', period: '2026-12', accountId: 'cc_itau_conjunta', type: 'debit', kind: 'expense', amount: 250 });
@@ -388,7 +388,7 @@ runTest('16. Poupanças & Investimentos independentes (Tesouro Direto, Poupança
   // Garante independência total: investimentos não alteram o débito/crédito da conta corrente
   const octTx = getState().transactions.filter(t => t.period === '2026-10');
   const summary = ctx.calculatePeriodSummary(octTx, '2026-10');
-  assert.strictEqual(summary.bankEndingBalanceCents, -449); // Saldo Itaú continua intocado em -R$ 4,49
+  assert.strictEqual(summary.bankEndingBalanceCents, 3941); // Saldo Itaú continua intocado em R$ 39,41
 });
 
 runTest('17. Controle Pessoal: Lançamentos diários (valor, tipo, notas fiscais) e Conciliação com o Banco', () => {
@@ -472,8 +472,9 @@ runTest('18. Regras de Cartão de Crédito: isolamento estrito sem somar ou mist
   assert.ok(septSum.totalCardCents > 0);
   assert.ok(octSum.totalCardCents > 0);
 
-  // Não há sobreposição: nenhuma transação de setembro é computada em outubro
-  const octHasSeptItem = octCardTx.some(t => t.date && t.date.includes('/09/'));
+  // Não há sobreposição: nenhuma transação da fatura de setembro é computada na fatura de outubro
+  const octIds = new Set(octCardTx.map(t => t.id));
+  const octHasSeptItem = septCardTx.some(t => octIds.has(t.id) || t.fileId === 'file_pdf_out_2026');
   assert.strictEqual(octHasSeptItem, false);
 });
 
@@ -734,6 +735,24 @@ runTest('26. Saldo Anterior: Apenas Setembro/2026 é editável e todos os outros
   // Restaura estado original
   st.periodStartingBalances['2026-09'] = origSepStart;
   st.selectedPeriod = origPeriod;
+});
+
+runTest('27. Sincronia Total Notebook + Celular: Unificação automática dos 4 arquivos oficiais (201 lançamentos)', () => {
+  // Simula o estado antigo do Celular (semente parcial cc_1..cc_5 com 0 arquivos) + 1 lançamento manual
+  const legacyCellState = {
+    transactions: [
+      { id: 'cc_1', owner: 'Éveli', accountId: 'cc_itau_conjunta', period: '2026-10', date: '01/10/2026', type: 'income', kind: 'income', desc: 'PIX TRANSF VITAL M01/10', amount: 500 },
+      { id: 'fc_p1', owner: 'Éveli', accountId: 'card_eveli_5544', period: '2026-10', date: '27/11/2026', type: 'card', kind: 'expense', desc: 'ALURA 11/12', amount: 104.30 },
+      { id: 'manual_user_1', isManual: true, owner: 'Vital', accountId: 'cc_itau_conjunta', period: '2026-10', date: '28/10/2026', type: 'debit', kind: 'expense', desc: 'Padaria Manual', amount: 15.00 }
+    ],
+    uploadedFiles: []
+  };
+
+  const unified = ctx.sanitizeState(legacyCellState, 'casal_eveli_vital');
+  // Deve conter exatamente os 201 lançamentos oficiais + 1 manual = 202 lançamentos base
+  assert.strictEqual(unified.transactions.length, 202, 'Estado do celular deve ser atualizado para os 201 lançamentos oficiais + 1 manual');
+  assert.strictEqual(unified.uploadedFiles.length, 4, 'Deve conter os 4 documentos oficiais (2 OFX e 2 PDFs)');
+  assert.strictEqual(unified.transactions.some(t => t.id === 'manual_user_1'), true, 'Lançamento manual do usuário é preservado');
 });
 
 console.log(`\n🎉 Resultado Final: ${passed} testes aprovados com sucesso!`);
