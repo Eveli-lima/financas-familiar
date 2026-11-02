@@ -113,6 +113,8 @@ runTest('2. Isolamento estrito de cartões: Setembro (Fatura Oficial R$ 3.375,50
   const sumOct = ctx.calculatePeriodSummary(octTx, '2026-10');
   assert.strictEqual(sumSep.cardEveliCents, 337550); // Setembro isolado: R$ 3.375,50 (Fatura Oficial fat-set.pdf)
   assert.strictEqual(sumOct.cardEveliCents, 309611); // Outubro isolado: R$ 3.096,11 (Fatura Oficial fat-out.pdf)
+  assert.strictEqual(sumSep.cardMaridoCents, 93897); // Cartão Vital Setembro: R$ 938,97 (15 compras dos prints)
+  assert.strictEqual(sumOct.cardMaridoCents, 42325); // Cartão Vital Outubro: R$ 423,25 (6 compras dos prints)
 });
 
 runTest('3. Saldo final da Conta Conjunta Itaú em Outubro/2026 (R$ 39,41)', () => {
@@ -279,7 +281,7 @@ runTest('13. Isolamento estrito de meses e Consolidado Geral Conta vs Cartões',
   assert.ok(rowOct);
   assert.strictEqual(rowOct.monthlyNetCents, rowOct.incomeCents - rowOct.bankDebitCents);
   assert.ok(consolidated.totals.initialBaseStartBalanceCents !== undefined);
-  assert.strictEqual(consolidated.totals.totalCardVitalCents, 0); // Vital ainda não gastou no cartão
+  assert.strictEqual(consolidated.totals.totalCardVitalCents, 136222); // Cartão Vital: R$ 938,97 (Set) + R$ 423,25 (Out) = R$ 1.362,22
 });
 
 runTest('14. Poupança Caixa: isolamento da conta corrente Itaú e soma no Patrimônio Total', () => {
@@ -737,7 +739,7 @@ runTest('26. Saldo Anterior: Apenas Setembro/2026 é editável e todos os outros
   st.selectedPeriod = origPeriod;
 });
 
-runTest('27. Sincronia Total Notebook + Celular: Unificação automática dos 4 arquivos oficiais (201 lançamentos)', () => {
+runTest('27. Sincronia Total Notebook + Celular: Unificação automática dos 6 arquivos oficiais (222 lançamentos)', () => {
   // Simula o estado antigo do Celular (semente parcial cc_1..cc_5 com 0 arquivos) + 1 lançamento manual
   const legacyCellState = {
     transactions: [
@@ -749,20 +751,48 @@ runTest('27. Sincronia Total Notebook + Celular: Unificação automática dos 4 
   };
 
   const unified = ctx.sanitizeState(legacyCellState, 'casal_eveli_vital');
-  // Deve conter exatamente os 201 lançamentos oficiais + 1 manual = 202 lançamentos base
-  assert.strictEqual(unified.transactions.length, 202, 'Estado do celular deve ser atualizado para os 201 lançamentos oficiais + 1 manual');
-  assert.strictEqual(unified.uploadedFiles.length, 4, 'Deve conter os 4 documentos oficiais (2 OFX e 2 PDFs)');
+  // Deve conter exatamente os 222 lançamentos oficiais + 1 manual = 223 lançamentos base
+  assert.strictEqual(unified.transactions.length, 223, 'Estado do celular deve ser atualizado para os 222 lançamentos oficiais + 1 manual');
+  assert.strictEqual(unified.uploadedFiles.length, 6, 'Deve conter os 6 documentos oficiais (2 OFX, 2 PDFs e 2 pacotes de Prints do Cartão Vital)');
   assert.strictEqual(unified.transactions.some(t => t.id === 'manual_user_1'), true, 'Lançamento manual do usuário é preservado');
 });
 
-runTest('28. Cartão Vital (Prints / Manual): Lançamentos caem exclusivamente no Cartão Vital sem afetar Cartão Éveli nem Conta Corrente', () => {
+runTest('28. Cartão Vital (Prints / Manual): Lançamentos e OCR de múltiplos prints caem exclusivamente no Cartão Vital', () => {
   const st = getState();
   const origTx = [...st.transactions];
 
   const beforeOct = ctx.calculatePeriodSummary(st.transactions.filter(t => t.period === '2026-10'), '2026-10');
-  assert.strictEqual(beforeOct.cardMaridoCents, 0, 'Cartão Vital inicia zerado em Out/2026');
+  assert.strictEqual(beforeOct.cardMaridoCents, 42325, 'Cartão Vital inicia com os R$ 423,25 dos prints de Out/2026');
 
-  // Simula lançamento via modal de Prints no Cartão Vital (card_marido)
+  // 1. Testa o leitor inteligente de prints do app (parseCardPrintOcrText) com o formato exato dos prints do Vital
+  const samplePrintOcr = [
+    '22:15',
+    'Cartão',
+    'CE Maric BR R$ 89,90',
+    'Cartão físico no crédito às 18h30',
+    '29 outubro 2026',
+    'PAYGO*ARAKEN PET',
+    'CE Maric BR R$ 89,90',
+    'Cartão físico no crédito às 18h30',
+    '18 setembro 2026',
+    'Pagamento Fatura R$ 1.141,78',
+    'às 12h59',
+    '15 setembro 2026',
+    'CASAS PEDRO',
+    'MARICA BR R$ 65,36',
+    'Cartão físico no crédito às 18h16'
+  ].join('\n');
+
+  const ocrItems = ctx.parseCardPrintOcrText(samplePrintOcr, 'card_marido', '2026-10');
+  assert.strictEqual(ocrItems.length, 2, 'Deve extrair as 2 compras válidas (ignorando item cortado no topo e Pagamento Fatura)');
+  assert.strictEqual(ocrItems[0].period, '2026-10');
+  assert.strictEqual(ocrItems[0].date, '29/10/2026');
+  assert.strictEqual(ocrItems[0].amount, 89.90);
+  assert.strictEqual(ocrItems[1].period, '2026-09');
+  assert.strictEqual(ocrItems[1].date, '15/09/2026');
+  assert.strictEqual(ocrItems[1].amount, 65.36);
+
+  // 2. Simula lançamento adicional via modal de Prints no Cartão Vital (card_marido)
   const fakeElements = {
     cardPrintModalAccountSelect: { value: 'card_marido' },
     cardPrintModalPeriodSelect: { value: '2026-10' },
@@ -786,8 +816,8 @@ runTest('28. Cartão Vital (Prints / Manual): Lançamentos caem exclusivamente n
   const afterOct = ctx.calculatePeriodSummary(st.transactions.filter(t => t.period === '2026-10'), '2026-10');
   const afterNov = ctx.calculatePeriodSummary(st.transactions.filter(t => t.period === '2026-11'), '2026-11');
 
-  // 185,50 + 214,50 + 150,00 = R$ 550,00 (55000 centavos) exclusivamente no Cartão Vital
-  assert.strictEqual(afterOct.cardMaridoCents, 55000, 'Cartão Vital em Out/2026 deve somar exatamente R$ 550,00');
+  // 423,25 + 185,50 + 214,50 + 150,00 = R$ 973,25 (97325 centavos) exclusivamente no Cartão Vital
+  assert.strictEqual(afterOct.cardMaridoCents, beforeOct.cardMaridoCents + 55000, 'Cartão Vital em Out/2026 deve somar +R$ 550,00');
   assert.strictEqual(afterOct.cardEveliCents, beforeOct.cardEveliCents, 'Cartão Éveli não deve ser alterado');
   assert.strictEqual(afterOct.bankEndingBalanceCents, beforeOct.bankEndingBalanceCents, 'Saldo da Conta Corrente não deve ser alterado');
 

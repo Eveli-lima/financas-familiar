@@ -2463,12 +2463,28 @@ function submitBatchCardPrintText() {
   const owner = isVital ? 'Vital' : 'Éveli';
   const source = isVital ? 'Cartão Vital' : 'Cartão MC Gold';
 
-  // Tenta usar primeiro o parser inteligente e também aceita formato livre "Descrição 50,00"
-  const parsed = typeof parseAnyFinancialText === 'function'
-    ? parseAnyFinancialText(rawText, owner, cardId, period, true)
-    : { candidates: [] };
+  // Tenta usar primeiro o leitor de prints de app ("27 outubro 2026 / R$ 74,15"), depois o parser inteligente e formato livre
+  const ocrParsed = typeof parseCardPrintOcrText === 'function' && /\b(janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b/i.test(rawText)
+    ? parseCardPrintOcrText(rawText, cardId, period)
+    : [];
 
-  let candidates = parsed.candidates || [];
+  let candidates = ocrParsed;
+
+  if (candidates.length === 0) {
+    const parsed = typeof parseAnyFinancialText === 'function'
+      ? parseAnyFinancialText(rawText, owner, cardId, period, true)
+      : { candidates: [] };
+    candidates = (parsed.candidates || []).map((c, idx) => ({
+      ...c,
+      id: `card_manual_batch_${Date.now()}_${idx}`,
+      isManual: true,
+      owner,
+      source,
+      accountId: cardId,
+      period,
+      type: 'card'
+    }));
+  }
 
   if (candidates.length === 0) {
     const [yyyy, mm] = period.split('-');
@@ -2499,17 +2515,6 @@ function submitBatchCardPrintText() {
         }
       }
     });
-  } else {
-    candidates = candidates.map((c, idx) => ({
-      ...c,
-      id: `card_manual_batch_${Date.now()}_${idx}`,
-      isManual: true,
-      owner,
-      source,
-      accountId: cardId,
-      period,
-      type: 'card'
-    }));
   }
 
   if (candidates.length === 0) {
@@ -2534,46 +2539,354 @@ function submitBatchCardPrintText() {
   return true;
 }
 
-function handleCardPrintImageAttach(event) {
-  const file = event?.target?.files?.[0];
-  if (!file) return;
+// ============================================================================
+// LEITOR INTELIGENTE DE MÚLTIPLOS PRINTS DE CARTÃO (OCR + PARSER DE FATURA APP)
+// ============================================================================
+const PT_MONTH_MAP = {
+  janeiro: '01', jan: '01',
+  fevereiro: '02', fev: '02',
+  marco: '03', 'março': '03', mar: '03',
+  abril: '04', abr: '04',
+  maio: '05', mai: '05',
+  junho: '06', jun: '06',
+  julho: '07', jul: '07',
+  agosto: '08', ago: '08',
+  setembro: '09', set: '09',
+  outubro: '10', out: '10',
+  novembro: '11', nov: '11',
+  dezembro: '12', dez: '12'
+};
+
+function parseCardPrintOcrText(rawText, cardId = 'card_marido', fallbackPeriod = '2026-10') {
+  const text = String(rawText || '');
+  if (!text.trim()) return [];
+
+  const isVital = cardId === 'card_marido';
+  const owner = isVital ? 'Vital' : 'Éveli';
+  const source = isVital ? 'Cartão Vital' : 'Cartão MC Gold';
+  const [fbYear, fbMonth] = (fallbackPeriod || '2026-10').split('-');
+
+  const rawLines = text
+    .split(/\r?\n/)
+    .map(l => l.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+
+  // Verifica se o texto possui cabeçalhos de data por extenso (ex: "27 outubro 2026", "15 setembro 2026")
+  const dateHeaderRegex = /\b(\d{1,2})\s+(?:de\s+)?(janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\s+(?:de\s+)?(20\d{2})\b/i;
+  const hasExtendedDateHeaders = rawLines.some(l => dateHeaderRegex.test(l));
+
+  let currentDate = null;
+  let currentPeriod = fallbackPeriod || '2026-10';
+  let pendingDescParts = [];
+  const extracted = [];
+
+  const isNoiseLine = (line) => {
+    const clean = line.toLowerCase();
+    if (/^\d{1,2}:\d{2}\b/.test(clean)) return true; // relógio topo do celular 22:15
+    if (/^(cart[aã]o|in[ií]cio|pix|investir|produtos)\b/i.test(clean) && !/r\$/i.test(clean)) return true;
+    if (/cart[aã]o\s+(f[ií]sico|virtual)\s+no\s+cr[eé]dito/i.test(clean) && !/r\$/i.test(clean)) return true;
+    if (/^[àa]s\s*\d{1,2}h\d{2}/i.test(clean) && !/r\$/i.test(clean)) return true;
+    if (/^[<>○□◁▷|]+$/.test(clean)) return true;
+    return false;
+  };
+
+  const cleanMerchantDesc = (str) => {
+    return String(str || '')
+      .replace(/cart[aã]o\s+(f[ií]sico|virtual)\s+no\s+cr[eé]dito/gi, '')
+      .replace(/\b[àa]s\s*\d{1,2}h\d{2}\b/gi, '')
+      .replace(/^[^A-Za-z0-9]+/, '')
+      .replace(/\s+[>›»]+$/, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = rawLines[i];
+
+    // 1. Detecta cabeçalho de data do print: "27 outubro 2026" ou "14 setembro 2026"
+    const dhMatch = line.match(dateHeaderRegex);
+    if (dhMatch && !/r\$\s*\d/i.test(line)) {
+      const dd = String(dhMatch[1]).padStart(2, '0');
+      const mName = dhMatch[2].toLowerCase();
+      const mm = PT_MONTH_MAP[mName] || fbMonth || '10';
+      const yyyy = dhMatch[3] || fbYear || '2026';
+      currentDate = `${dd}/${mm}/${yyyy}`;
+      currentPeriod = `${yyyy}-${mm}`;
+      pendingDescParts = [];
+      continue;
+    }
+
+    if (isNoiseLine(line)) continue;
+
+    // 2. Detecta linha com valor monetário (ex: "R$ 74,15" ou "GRAO DE OURO ... R$ 74,15" ou "12/10 Posto 150,00")
+    const amountMatch = line.match(/(?:R\$\s*)?(-?\d{1,3}(?:\.\d{3})*,\d{2})\b/i);
+    if (amountMatch) {
+      const amountRaw = amountMatch[1];
+      const val = parseFloat(amountRaw.replace(/\./g, '').replace(',', '.'));
+      if (isNaN(val) || Math.abs(val) <= 0) continue;
+
+      // Verifica se a própria linha traz data curta DD/MM ou DD/MM/AAAA no início
+      let itemDate = currentDate;
+      let itemPeriod = currentPeriod;
+      let lineWithoutAmount = line.replace(amountMatch[0], '').replace(/R\$/gi, '').trim();
+
+      const inlineDateMatch = lineWithoutAmount.match(/^(\d{1,2})\/(\d{1,2})(?:\/(20\d{2}|\d{2}))?\s+(.+)$/);
+      if (inlineDateMatch) {
+        const dd = String(inlineDateMatch[1]).padStart(2, '0');
+        const mm = String(inlineDateMatch[2]).padStart(2, '0');
+        const yyyy = inlineDateMatch[3]
+          ? (inlineDateMatch[3].length === 2 ? `20${inlineDateMatch[3]}` : inlineDateMatch[3])
+          : (fbYear || '2026');
+        itemDate = `${dd}/${mm}/${yyyy}`;
+        itemPeriod = `${yyyy}-${mm}`;
+        lineWithoutAmount = inlineDateMatch[4].trim();
+      }
+
+      // Se o print tem cabeçalhos de data ("27 outubro 2026"), ignora item cortado no topo antes do 1º cabeçalho de data
+      if (hasExtendedDateHeaders && !itemDate) {
+        pendingDescParts = [];
+        continue;
+      }
+
+      if (!itemDate) {
+        itemDate = `15/${fbMonth || '10'}/${fbYear || '2026'}`;
+      }
+
+      const combinedDesc = cleanMerchantDesc([...pendingDescParts, lineWithoutAmount].join(' '));
+      pendingDescParts = [];
+
+      if (!combinedDesc || combinedDesc.length < 2) continue;
+
+      // Ignora "Pagamento Fatura" para não somar pagamento de conta como compra nova
+      if (/pagamento\s+(da\s+)?fatura|pagto\s+fatura/i.test(combinedDesc)) {
+        continue;
+      }
+
+      const instInfo = typeof extractInstallmentFromDesc === 'function'
+        ? extractInstallmentFromDesc(combinedDesc)
+        : null;
+
+      const cat = typeof classifyItemCategory === 'function'
+        ? classifyItemCategory(combinedDesc, false, true)
+        : 'Casa, Serviços & Outros';
+
+      extracted.push({
+        id: `card_print_${Date.now()}_${extracted.length}_${Math.random().toString(36).slice(2, 6)}`,
+        isManual: true,
+        owner,
+        source,
+        accountId: cardId,
+        period: itemPeriod,
+        date: itemDate,
+        type: 'card',
+        kind: val < 0 ? 'reimbursement' : 'expense',
+        scope: 'shared',
+        category: cat,
+        installmentCurrent: instInfo ? instInfo.current : null,
+        installmentTotal: instInfo ? instInfo.total : null,
+        desc: combinedDesc.slice(0, 120),
+        amount: fromCents(toCents(Math.abs(val))),
+        createdBy: typeof getLoggedPerson === 'function' ? getLoggedPerson() : owner
+      });
+    } else {
+      // Linha de texto de descrição do estabelecimento (ex: "GRAO DE OURO" / "PEDRA AZUL MARI...")
+      const cleaned = cleanMerchantDesc(line);
+      if (cleaned && cleaned.length >= 2) {
+        pendingDescParts.push(cleaned);
+        if (pendingDescParts.length > 2) pendingDescParts.shift();
+      }
+    }
+  }
+
+  return extracted;
+}
+
+function compressPrintImageFile(file, maxWidth = 1000, quality = 0.72) {
+  return new Promise((resolve) => {
+    if (typeof FileReader === 'undefined') {
+      resolve(null);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => resolve(null);
+    reader.onload = () => {
+      const rawDataUrl = typeof reader.result === 'string' ? reader.result : null;
+      if (!rawDataUrl || typeof Image === 'undefined' || typeof document === 'undefined') {
+        resolve(rawDataUrl);
+        return;
+      }
+      const img = new Image();
+      img.onerror = () => resolve(rawDataUrl);
+      img.onload = () => {
+        try {
+          let w = img.width || 800;
+          let h = img.height || 1200;
+          if (w > maxWidth) {
+            h = Math.round((h * maxWidth) / w);
+            w = maxWidth;
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx2d = canvas.getContext('2d');
+          if (!ctx2d) {
+            resolve(rawDataUrl);
+            return;
+          }
+          ctx2d.drawImage(img, 0, 0, w, h);
+          const compressed = canvas.toDataURL('image/jpeg', quality);
+          resolve(compressed || rawDataUrl);
+        } catch (e) {
+          resolve(rawDataUrl);
+        }
+      };
+      img.src = rawDataUrl;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+let tesseractLoadingPromise = null;
+function ensureTesseractLoaded() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return Promise.resolve(null);
+  if (window.Tesseract) return Promise.resolve(window.Tesseract);
+  if (tesseractLoadingPromise) return tesseractLoadingPromise;
+
+  tesseractLoadingPromise = new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    script.async = true;
+    script.onload = () => resolve(window.Tesseract || null);
+    script.onerror = () => {
+      tesseractLoadingPromise = null;
+      resolve(null);
+    };
+    document.head.appendChild(script);
+  });
+  return tesseractLoadingPromise;
+}
+
+async function extractTextFromPrintImageWithOcr(imageSource) {
+  if (!imageSource) return '';
+  try {
+    const TesseractLib = await ensureTesseractLoaded();
+    if (!TesseractLib || typeof TesseractLib.recognize !== 'function') return '';
+    const result = await TesseractLib.recognize(imageSource, 'por', { logger: () => {} });
+    return result?.data?.text || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+async function handleCardPrintImageAttach(event) {
+  const files = Array.from(event?.target?.files || []);
+  if (files.length === 0) return;
 
   const cardId = document.getElementById('cardPrintModalAccountSelect')?.value || 'card_marido';
   const period = document.getElementById('cardPrintModalPeriodSelect')?.value || '2026-10';
   const isVital = cardId === 'card_marido';
   const accountLabel = isVital ? 'Cartão Vital' : 'Cartão Itaú MC Gold (Final 5544)';
+  const feedback = document.getElementById('cardPrintAttachFeedback');
 
-  const reader = new FileReader();
-  reader.onload = () => {
-    const dataUrl = reader.result;
-    if (!Array.isArray(state.uploadedFiles)) state.uploadedFiles = [];
-    const now = new Date();
-    const pad = n => String(n).padStart(2, '0');
-    const uploadedAt = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  if (feedback) {
+    feedback.className = 'text-[11px] font-semibold text-sky-900 bg-sky-50 border border-sky-200 rounded-xl px-3 py-2';
+    feedback.textContent = `⏳ Processando ${files.length} print(s) selecionado(s)... Extraindo compras e salvando comprovantes...`;
+    feedback.classList.remove('hidden');
+  }
+
+  if (!Array.isArray(state.uploadedFiles)) state.uploadedFiles = [];
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const uploadedAt = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+  const txSig = (t) => {
+    const amt = toCents(t.amount);
+    const normDesc = String(t.desc || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 14);
+    return `${t.accountId}|${t.period}|${t.date}|${amt}|${normDesc}`;
+  };
+  const existingSigs = new Set((state.transactions || []).map(txSig));
+
+  let totalAddedTx = 0;
+  let totalAddedCents = 0;
+  const touchedPeriods = new Set();
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    if (feedback && files.length > 1) {
+      feedback.textContent = `⏳ Lendo print ${i + 1} de ${files.length} ("${file.name}")...`;
+    }
+
+    const compressedDataUrl = await compressPrintImageFile(file);
+    const ocrText = await extractTextFromPrintImageWithOcr(compressedDataUrl || file);
+    const parsedItems = parseCardPrintOcrText(ocrText, cardId, period);
+
+    const fileId = `file_print_${Date.now()}_${i}`;
+    let fileItemCount = 0;
+    let fileTotalCents = 0;
+    let fileDetectedPeriod = period;
+
+    parsedItems.forEach((item, idx) => {
+      const sig = txSig(item);
+      if (!existingSigs.has(sig)) {
+        existingSigs.add(sig);
+        item.id = `${fileId}_tx_${idx}`;
+        item.fileId = fileId;
+        item.fileName = file.name || `Print_${i + 1}_${accountLabel}.jpg`;
+        state.transactions.unshift(item);
+        fileItemCount++;
+        fileTotalCents += toCents(item.amount);
+        totalAddedTx++;
+        totalAddedCents += toCents(item.amount);
+        touchedPeriods.add(item.period);
+        fileDetectedPeriod = item.period;
+      }
+    });
 
     state.uploadedFiles.unshift({
-      id: 'file_print_' + Date.now(),
-      fileName: file.name || `Print_${accountLabel}_${period}.jpg`,
+      id: fileId,
+      fileName: file.name || `Print_${i + 1}_${accountLabel}_${fileDetectedPeriod}.jpg`,
       fileType: 'receipt_photo',
       fileSize: file.size || 0,
       uploadedAt,
-      period,
+      period: fileDetectedPeriod,
       targetAccount: cardId,
       accountLabel,
-      itemCount: 1,
-      totalAmount: 0,
-      receiptImage: typeof dataUrl === 'string' ? dataUrl : null,
+      itemCount: fileItemCount || 1,
+      totalAmount: fromCents(fileTotalCents),
+      receiptImage: typeof compressedDataUrl === 'string' ? compressedDataUrl : null,
       dailyExpenseId: null,
-      desc: `Print da Fatura — ${accountLabel} (${formatPeriodLabel(period)})`
+      desc: fileItemCount > 0
+        ? `Print Fatura ${accountLabel} (${fileItemCount} compras — ${formatCentsBRL(fileTotalCents)})`
+        : `Print da Fatura — ${accountLabel} (${formatPeriodLabel(fileDetectedPeriod)})`
     });
+  }
 
-    saveState();
-    renderAll();
-    const feedback = document.getElementById('cardPrintAttachFeedback');
-    if (feedback) {
-      feedback.textContent = `✅ Imagem "${file.name}" anexada e salva em Arquivos & Fotos!`;
-      feedback.classList.remove('hidden');
+  state.transactions = enrichTransactionsAndProjectInstallments(state.transactions);
+
+  if (typeof recordAuditLog === 'function') {
+    recordAuditLog(
+      `Envio de ${files.length} Print(s) (${accountLabel})`,
+      `${files.length} imagem(ns) anexada(s) e ${totalAddedTx} compra(s) extraída(s) (${formatCentsBRL(totalAddedCents)})`
+    );
+  }
+
+  saveState();
+  if (typeof pushStateToSupabaseCloud === 'function') {
+    pushStateToSupabaseCloud(true);
+  }
+  renderAll();
+  renderCardPrintModalItems();
+
+  if (feedback) {
+    feedback.className = 'text-[11px] font-semibold text-emerald-900 bg-emerald-50 border border-emerald-300 rounded-xl px-3 py-2';
+    if (totalAddedTx > 0) {
+      const periodsLabel = Array.from(touchedPeriods).map(formatPeriodLabel).join(', ');
+      feedback.textContent = `✅ ${files.length} print(s) enviado(s)! ${totalAddedTx} compra(s) (${formatCentsBRL(totalAddedCents)}) lançada(s) automaticamente no ${accountLabel} (${periodsLabel})!`;
+    } else {
+      feedback.textContent = `✅ ${files.length} print(s) salvo(s) em Arquivos & Fotos! Você também pode digitar ou colar valores nos campos abaixo.`;
     }
-  };
-  reader.readAsDataURL(file);
+    feedback.classList.remove('hidden');
+  }
+
+  if (event?.target) event.target.value = '';
 }

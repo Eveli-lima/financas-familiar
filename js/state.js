@@ -327,6 +327,9 @@ function sanitizeState(raw, householdOverride) {
     const officialFileNames = new Set([
       'fat-out.pdf',
       'fat-set.pdf',
+      'Prints_Cartao_Vital_Out2026.jpg',
+      'Prints_Cartao_Vital_Set2026.jpg',
+      '74337.png',
       'Extrato Conta Corrente-011120262136.ofx',
       'Extrato Conta Corrente-011120262135.ofx'
     ]);

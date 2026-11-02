@@ -1974,12 +1974,35 @@
           </div>
         </div>
 
-        <!-- Opção 1: Lançar Compra Rápida ou Total do Print -->
+        <!-- Opção 1 (Destaque): Enviar Vários Prints de Uma Vez (Leitura Automática OCR + Comprovantes) -->
+        <div class="p-4 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50/70 to-sky-50 border-2 border-emerald-300 shadow-xs space-y-2.5">
+          <div class="flex items-center justify-between flex-wrap gap-1">
+            <h4 class="font-bold text-emerald-950 text-xs sm:text-sm flex items-center gap-1.5">
+              <span class="w-5 h-5 rounded-full bg-emerald-600 text-white inline-flex items-center justify-center text-[11px] font-bold">1</span>
+              <span>📸 Enviar Vários Prints de Uma Vez (Leitura Automática)</span>
+            </h4>
+            <span class="text-[10px] text-emerald-800 font-bold bg-white/90 border border-emerald-200 px-2 py-0.5 rounded-md">
+              Aceita 1, 5, 10+ prints juntos
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-600">
+            Selecione na galeria do celular ou PC <strong>todos os prints da fatura de uma vez só</strong>. O sistema lê automaticamente as datas, nomes dos estabelecimentos e valores (R$), separa por mês e salva as fotos em <strong>Arquivos & Fotos</strong>:
+          </p>
+          <div class="space-y-2 pt-0.5">
+            <label class="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-sm transition cursor-pointer flex items-center justify-center gap-2">
+              <span>🖼️ Selecionar Vários Prints do Celular / PC</span>
+              <input id="cardPrintImageFileInput" type="file" accept="image/*" multiple class="hidden" onchange="handleCardPrintImageAttach(event)" />
+            </label>
+            <div id="cardPrintAttachFeedback" class="hidden text-[11px] font-semibold text-emerald-900 bg-emerald-50 border border-emerald-300 rounded-xl px-3 py-2"></div>
+          </div>
+        </div>
+
+        <!-- Opção 2: Lançar Compra Rápida ou Total do Print -->
         <div class="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-3">
           <div class="flex items-center justify-between flex-wrap gap-1">
             <h4 class="font-bold text-slate-900 text-xs flex items-center gap-1.5">
-              <span class="w-5 h-5 rounded-full bg-indigo-600 text-white inline-flex items-center justify-center text-[11px] font-bold">1</span>
-              Digitar Compra do Print (ou Valor Total da Fatura)
+              <span class="w-5 h-5 rounded-full bg-indigo-600 text-white inline-flex items-center justify-center text-[11px] font-bold">2</span>
+              Digitar Compra Individual (ou Valor Total da Fatura)
             </h4>
             <span class="text-[10px] text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
               Cai apenas no cartão selecionado acima
@@ -2033,40 +2056,19 @@
           </form>
         </div>
 
-        <!-- Opção 2: Colar várias linhas de uma vez + Anexar Foto do Print -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
-            <h4 class="font-bold text-slate-900 text-xs flex items-center gap-1.5">
-              <span class="w-5 h-5 rounded-full bg-slate-700 text-white inline-flex items-center justify-center text-[11px] font-bold">2</span>
-              Colar Lista / Texto Copiado do Print
-            </h4>
-            <p class="text-[11px] text-slate-500">
-              Se você copiou o texto do print no celular, cole abaixo (uma compra por linha, ex: <code>12/10 Posto Shell 150,00</code>):
-            </p>
-            <textarea id="cardPrintBatchTextarea" rows="3" placeholder="10/10 Supermercado 230,50&#10;14/10 Farmacia 89,90&#10;18/10 Loja 02/05 120,00" class="w-full border border-slate-300 rounded-xl p-2 text-xs bg-white font-mono"></textarea>
-            <button type="button" onclick="submitBatchCardPrintText()" class="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs transition cursor-pointer">
-              📥 Importar Linhas no Cartão
-            </button>
-          </div>
-
-          <div class="p-3.5 rounded-2xl bg-sky-50/60 border border-sky-200/80 space-y-2 flex flex-col justify-between">
-            <div class="space-y-1.5">
-              <h4 class="font-bold text-sky-950 text-xs flex items-center gap-1.5">
-                <span class="w-5 h-5 rounded-full bg-sky-600 text-white inline-flex items-center justify-center text-[11px] font-bold">3</span>
-                Guardar Imagem do Print (Comprovante)
-              </h4>
-              <p class="text-[11px] text-slate-600">
-                Anexe as imagens dos prints da fatura para ficarem salvas em <strong>Arquivos & Fotos</strong> vinculadas a este cartão:
-              </p>
-            </div>
-            <div class="space-y-2 pt-1">
-              <label class="w-full py-2.5 px-3 rounded-xl bg-white hover:bg-sky-100/70 text-sky-900 border border-sky-300 font-bold text-xs shadow-2xs transition cursor-pointer flex items-center justify-center gap-1.5">
-                <span>🖼️ Escolher Print(s) do Celular/PC</span>
-                <input id="cardPrintImageFileInput" type="file" accept="image/*" multiple class="hidden" onchange="handleCardPrintImageAttach(event)" />
-              </label>
-              <div id="cardPrintAttachFeedback" class="hidden text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl px-2.5 py-1.5"></div>
-            </div>
-          </div>
+        <!-- Opção 3: Colar várias linhas de texto de uma vez -->
+        <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+          <h4 class="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+            <span class="w-5 h-5 rounded-full bg-slate-700 text-white inline-flex items-center justify-center text-[11px] font-bold">3</span>
+            Colar Lista / Texto Copiado do Print
+          </h4>
+          <p class="text-[11px] text-slate-500">
+            Se você copiou o texto do print no celular, cole abaixo (aceita tanto o texto completo do app quanto linhas simples como <code>12/10 Posto Shell 150,00</code>):
+          </p>
+          <textarea id="cardPrintBatchTextarea" rows="3" placeholder="27 outubro 2026&#10;GRAO DE OURO R$ 74,15&#10;ou: 10/10 Supermercado 230,50" class="w-full border border-slate-300 rounded-xl p-2 text-xs bg-white font-mono"></textarea>
+          <button type="button" onclick="submitBatchCardPrintText()" class="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs transition cursor-pointer">
+            📥 Importar Texto no Cartão
+          </button>
         </div>
 
         <!-- Lista de gastos já lançados neste cartão no mês selecionado -->
@@ -2092,16 +2094,16 @@
   <!-- =================================================================== -->
   <!-- MÓDULOS JAVASCRIPT SEPARADOS POR RESPONSABILIDADE (ETAPAS 2, 3 E 4) -->
   <!-- =================================================================== -->
-  <script src="js/utils.js?v=8"></script>
-  <script src="js/data-seed.js?v=8"></script>
-  <script src="js/state.js?v=8"></script>
-  <script src="js/finance-engine.js?v=8"></script>
-  <script src="js/financial-ai.js?v=8"></script>
-  <script src="js/importer-backup.js?v=8"></script>
-  <script src="js/supabase-config.js?v=8"></script>
-  <script src="js/supabase-sync.js?v=8"></script>
-  <script src="js/actions.js?v=8"></script>
-  <script src="js/auth-guard.js?v=8"></script>
-  <script src="js/ui-render.js?v=8"></script>
+  <script src="js/utils.js?v=9"></script>
+  <script src="js/data-seed.js?v=9"></script>
+  <script src="js/state.js?v=9"></script>
+  <script src="js/finance-engine.js?v=9"></script>
+  <script src="js/financial-ai.js?v=9"></script>
+  <script src="js/importer-backup.js?v=9"></script>
+  <script src="js/supabase-config.js?v=9"></script>
+  <script src="js/supabase-sync.js?v=9"></script>
+  <script src="js/actions.js?v=9"></script>
+  <script src="js/auth-guard.js?v=9"></script>
+  <script src="js/ui-render.js?v=9"></script>
 </body>
 </html>
