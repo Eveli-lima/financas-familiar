@@ -312,12 +312,20 @@ function sanitizeState(raw, householdOverride) {
       };
     });
 
+  // Lista de IDs excluídos intencionalmente pelo usuário (Tombstones para sincronização CRDT multi-aparelho)
+  clean.deletedIds = Array.from(new Set(
+    (Array.isArray(raw.deletedIds) ? raw.deletedIds : [])
+      .map(id => sanitizeId(id))
+      .filter(Boolean)
+  )).slice(-500);
+  const deletedSet = new Set(clean.deletedIds);
+
   // Vida financeira começa a partir de Setembro/2026 (meses anteriores desconsiderados)
   clean.transactions = clean.transactions.filter(t => String(t.period) >= '2026-09');
 
-  // Sincronização Canônica dos 4 Documentos Oficiais do Casal (Notebook + Celular + Nuvem):
+  // Sincronização Canônica dos 6 Documentos Oficiais do Casal (Notebook + Celular + Nuvem):
   // Se o estado do casal vier da semente antiga parcial (cc_1, fc_p1, set_1) ou de importações locais avulsas (imp_...),
-  // unifica automaticamente para os 201 lançamentos oficiais e 4 arquivos oficiais, preservando lançamentos manuais.
+  // unifica automaticamente para os 236 lançamentos oficiais e 6 arquivos oficiais, preservando lançamentos manuais.
   if (
     coupleMode &&
     typeof baseTransactions !== 'undefined' &&
@@ -330,6 +338,10 @@ function sanitizeState(raw, householdOverride) {
       'Prints_Cartao_Vital_Out2026.jpg',
       'Prints_Cartao_Vital_Set2026.jpg',
       '74337.png',
+      '74339.png',
+      '74341.png',
+      '74343.png',
+      '74345.png',
       'Extrato Conta Corrente-011120262136.ofx',
       'Extrato Conta Corrente-011120262135.ofx'
     ]);
@@ -350,14 +362,24 @@ function sanitizeState(raw, householdOverride) {
         return `${t.accountId || ''}|${t.period || ''}|${t.type || ''}|${t.date || ''}|${amt}|${normDesc}`;
       };
       const canonicalSigs = new Set(canonicalTx.map(txSig));
+      // Assinatura por conta + data + valor em centavos para deduplicar OCR ruidoso contra a base limpa do Cartão Vital
+      const canonicalDateAmtSigs = new Set(canonicalTx.map(t => {
+        const amt = typeof toCents === 'function' ? toCents(t.amount) : Math.round((Number(t.amount) || 0) * 100);
+        return `${t.accountId || ''}|${t.date || ''}|${amt}`;
+      }));
 
       const extraUserTx = clean.transactions.filter(t => {
         if (t.isAutoProjected) return false;
+        if (deletedSet.has(t.id)) return false;
         if (canonicalIds.has(t.id)) return false;
         if (/^(cc_\d+|fc_(p|l|m|u|s|o)\d+|fc_sep_(p|v)\d+|set_\d+)$/.test(String(t.id))) return false;
         if (/^imp_(ofx|pdf)_/.test(String(t.id)) && (t.period === '2026-09' || t.period === '2026-10')) return false;
+        if (/^file_print_17935(899|900)/.test(String(t.id))) return false;
         if (t.fileName && officialFileNames.has(t.fileName)) return false;
-        if (!t.isManual && canonicalSigs.has(txSig(t))) return false;
+        if (/\bpagamento\s+(da\s+|de\s+)/i.test(String(t.desc || '')) && t.type === 'card') return false;
+        if (canonicalSigs.has(txSig(t))) return false;
+        const amt = typeof toCents === 'function' ? toCents(t.amount) : Math.round((Number(t.amount) || 0) * 100);
+        if (t.accountId === 'card_marido' && canonicalDateAmtSigs.has(`${t.accountId}|${t.date || ''}|${amt}`)) return false;
         return true;
       });
 
@@ -366,12 +388,19 @@ function sanitizeState(raw, householdOverride) {
       if (typeof OFFICIAL_COUPLE_UPLOADED_FILES !== 'undefined' && Array.isArray(OFFICIAL_COUPLE_UPLOADED_FILES)) {
         const canonicalFileIds = new Set(OFFICIAL_COUPLE_UPLOADED_FILES.map(f => f.id));
         const extraFiles = (clean.uploadedFiles || []).filter(f =>
-          !canonicalFileIds.has(f.id) && !officialFileNames.has(f.fileName)
+          !deletedSet.has(f.id) && !canonicalFileIds.has(f.id) && !officialFileNames.has(f.fileName)
         );
         clean.uploadedFiles = [
           ...OFFICIAL_COUPLE_UPLOADED_FILES.map(f => ({ ...f })),
           ...extraFiles
         ];
+      }
+
+      if ((!Array.isArray(clean.futureGoals) || clean.futureGoals.length === 0) && clean.deletedIds.length === 0) {
+        const initialCouple = getInitialFamilyData();
+        if (Array.isArray(initialCouple.futureGoals)) {
+          clean.futureGoals = initialCouple.futureGoals.map(g => ({ ...g }));
+        }
       }
     }
   }
@@ -415,6 +444,11 @@ function loadState(householdOverride, ownerName = 'Titular') {
     if (savedV5) {
       try {
         const parsed = sanitizeState(JSON.parse(savedV5), code);
+        // Evita abrir o sistema em um mês futuro vazio (ex: 2026-11) sem faturas reais importadas, o que faz parecer que os cartões sumiram
+        const hasRealTxInSelected = (parsed.transactions || []).some(t => !t.isAutoProjected && t.period === parsed.selectedPeriod);
+        if (parsed.selectedPeriod > '2026-10' && !hasRealTxInSelected) {
+          parsed.selectedPeriod = '2026-10';
+        }
         parsed.transactions = enrichTransactionsAndProjectInstallments(parsed.transactions || []);
         return parsed;
       } catch (e) {}
@@ -455,14 +489,29 @@ function loadState(householdOverride, ownerName = 'Titular') {
   return initial;
 }
 
-function saveState() {
+function recordDeletedIds(ids) {
+  if (!state) return;
+  if (!Array.isArray(state.deletedIds)) state.deletedIds = [];
+  const list = Array.isArray(ids) ? ids : [ids];
+  const existing = new Set(state.deletedIds);
+  list.forEach(rawId => {
+    const cleanId = sanitizeId(rawId);
+    if (cleanId && !existing.has(cleanId)) {
+      state.deletedIds.push(cleanId);
+      existing.add(cleanId);
+    }
+  });
+  if (state.deletedIds.length > 500) {
+    state.deletedIds = state.deletedIds.slice(-500);
+  }
+}
+
+function saveLocalStateOnly() {
   const storageKey = getActiveStorageKey();
   if (typeof localStorage !== 'undefined') {
     try {
       localStorage.setItem(storageKey, JSON.stringify(state));
     } catch (err) {
-      // Proteção contra estouro de memória (QuotaExceededError de 5MB do navegador):
-      // Remove primeiro eventuais imagens duplicadas ou as fotos mais antigas já conciliadas para nunca perder lançamentos financeiros
       try {
         if (Array.isArray(state.uploadedFiles)) {
           state.uploadedFiles.forEach(f => {
@@ -483,6 +532,10 @@ function saveState() {
       }
     }
   }
+}
+
+function saveState() {
+  saveLocalStateOnly();
   if (typeof scheduleCloudAutoSync === 'function') {
     scheduleCloudAutoSync();
   }

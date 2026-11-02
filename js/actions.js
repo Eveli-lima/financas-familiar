@@ -8,7 +8,8 @@
 
 function setActiveTab(tabName) {
   state.activeTab = tabName;
-  saveState();
+  if (typeof saveLocalStateOnly === 'function') saveLocalStateOnly();
+  else saveState();
   renderAll();
 }
 
@@ -16,25 +17,29 @@ function setPeriod(p) {
   state.selectedPeriod = p;
   const picker = document.getElementById('customPeriodPicker');
   if (picker && p !== 'ALL') picker.value = p;
-  saveState();
+  if (typeof saveLocalStateOnly === 'function') saveLocalStateOnly();
+  else saveState();
   renderAll();
 }
 
 function setOwnerFilter(owner) {
   state.selectedOwner = owner;
-  saveState();
+  if (typeof saveLocalStateOnly === 'function') saveLocalStateOnly();
+  else saveState();
   renderAll();
 }
 
 function setScopeFilter(scope) {
   state.selectedScope = scope;
-  saveState();
+  if (typeof saveLocalStateOnly === 'function') saveLocalStateOnly();
+  else saveState();
   renderAll();
 }
 
 function toggleIncludeCardBill(checked) {
   state.includeCurrentCardBill = checked;
-  saveState();
+  if (typeof saveLocalStateOnly === 'function') saveLocalStateOnly();
+  else saveState();
   renderAll();
 }
 
@@ -377,6 +382,7 @@ function postponeGoalMonth(goalId) {
 
 function deleteFutureGoal(goalId) {
   if (!confirm('Deseja excluir esta meta futura?')) return;
+  if (typeof recordDeletedIds === 'function') recordDeletedIds(goalId);
   state.futureGoals = state.futureGoals.filter(g => g.id !== goalId);
   saveState();
   renderAll();
@@ -781,6 +787,7 @@ function deleteTransaction(id, options) {
     recordAuditLog('Exclusão de Lançamento', `${tx.desc} (${formatBRL(tx.amount)})`);
   }
 
+  if (typeof recordDeletedIds === 'function') recordDeletedIds(id);
   state.transactions = state.transactions.filter(t => t.id !== id);
   saveState();
   renderAll();
@@ -1345,6 +1352,9 @@ function saveDailyExpense(e) {
 function deleteDailyExpense(id) {
   if (typeof confirm === 'function' && !confirm('Deseja excluir este lançamento diário?')) return;
   const target = (state.dailyExpenses || []).find(d => d.id === id);
+  if (typeof recordDeletedIds === 'function') {
+    recordDeletedIds(target && target.fileId ? [id, target.fileId] : [id]);
+  }
   if (target && target.fileId) {
     state.uploadedFiles = (state.uploadedFiles || []).filter(f => f.id !== target.fileId && f.dailyExpenseId !== id);
   }
@@ -2220,6 +2230,15 @@ function deleteUploadedFileCascade(fileId, options) {
 
   if (typeof confirm === 'function' && !confirm(confirmMsg)) return;
 
+  // 0. Registra os IDs excluídos (Tombstones) para que a sincronização multi-dispositivo respeite a exclusão
+  if (typeof recordDeletedIds === 'function') {
+    recordDeletedIds([
+      fileId,
+      ...linkedTxs.map(t => t.id),
+      ...linkedDaily.map(d => d.id)
+    ]);
+  }
+
   // 1. Remove as transações geradas por este arquivo
   if (linkedTxs.length > 0) {
     state.transactions = state.transactions.filter(t => t.fileId !== fileId);
@@ -2592,10 +2611,10 @@ function parseCardPrintOcrText(rawText, cardId = 'card_marido', fallbackPeriod =
 
   const cleanMerchantDesc = (str) => {
     return String(str || '')
-      .replace(/cart[aã]o\s+(f[ií]sico|virtual)\s+no\s+cr[eé]dito/gi, '')
+      .replace(/[oc]?\s*cart[aã]o\s*(f[ií]sico|virtual)\s*no\s*cr[eé]dito/gi, '')
       .replace(/\b[àa]s\s*\d{1,2}h\d{2}\b/gi, '')
       .replace(/^[^A-Za-z0-9]+/, '')
-      .replace(/\s+[>›»]+$/, '')
+      .replace(/\s+[>›»|;,'"]+$/, '')
       .replace(/\s+/g, ' ')
       .trim();
   };
@@ -2657,8 +2676,8 @@ function parseCardPrintOcrText(rawText, cardId = 'card_marido', fallbackPeriod =
 
       if (!combinedDesc || combinedDesc.length < 2) continue;
 
-      // Ignora "Pagamento Fatura" para não somar pagamento de conta como compra nova
-      if (/pagamento\s+(da\s+)?fatura|pagto\s+fatura/i.test(combinedDesc)) {
+      // Ignora "Pagamento Fatura" / "Pagamento de ..." para não somar pagamento de conta como compra nova
+      if (/pagamento\s+(da\s+|de\s+)?(fatura)?|pagto\s+fatura/i.test(combinedDesc)) {
         continue;
       }
 
@@ -2701,7 +2720,7 @@ function parseCardPrintOcrText(rawText, cardId = 'card_marido', fallbackPeriod =
   return extracted;
 }
 
-function compressPrintImageFile(file, maxWidth = 1000, quality = 0.72) {
+function compressPrintImageFile(file, maxWidth = 680, quality = 0.55) {
   return new Promise((resolve) => {
     if (typeof FileReader === 'undefined') {
       resolve(null);

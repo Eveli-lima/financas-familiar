@@ -44,7 +44,9 @@ function escapeHtml(str) {
 // Extrai parcela atual e total de descrições como "ALURA 11/12" ou "SuperBruno 10/10"
 function extractInstallmentFromDesc(desc) {
   if (!desc) return null;
-  const matches = [...String(desc).matchAll(/\b(\d{1,2})\/(\d{1,2})\b/g)];
+  // Ignora datas entre parênteses como "(08/10)" ou "(26/09)"
+  const cleaned = String(desc).replace(/\(\s*\d{1,2}\/\d{1,2}\s*\)/g, '');
+  const matches = [...cleaned.matchAll(/\b(\d{1,2})\/(\d{1,2})\b/g)];
   for (const m of matches) {
     const cur = parseInt(m[1], 10);
     const tot = parseInt(m[2], 10);

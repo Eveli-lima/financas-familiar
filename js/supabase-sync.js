@@ -436,15 +436,44 @@ async function upsertHouseholdRowDirect(rowPayload) {
     .upsert(rowPayload, { onConflict: 'household_code' });
 }
 
-// Mescla itens protegidos (OFX/PDF/meses fechados) de uma fonte externa sem perder nada
+// Motor de Sincronização Multi-Dispositivo (Padrão de Mercado: CRDT Set-Union + Tombstones):
+// Une 100% dos registros de ambos os aparelhos (lançamentos oficiais, lançamentos manuais, prints do cartão,
+// gastos diários, metas e categorias), respeitando apenas os IDs explicitamente excluídos (deletedIds).
 function mergeProtectedItemsIntoTarget(targetState, sourceState) {
   let addedAny = false;
   if (!targetState || !sourceState) return addedAny;
 
   if (!Array.isArray(targetState.transactions)) targetState.transactions = [];
   if (!Array.isArray(targetState.uploadedFiles)) targetState.uploadedFiles = [];
+  if (!Array.isArray(targetState.dailyExpenses)) targetState.dailyExpenses = [];
+  if (!Array.isArray(targetState.futureGoals)) targetState.futureGoals = [];
   if (!Array.isArray(targetState.importedSources)) targetState.importedSources = [];
+  if (!Array.isArray(targetState.customCategories)) targetState.customCategories = [];
+  if (!Array.isArray(targetState.deletedIds)) targetState.deletedIds = [];
 
+  // 1. União de Tombstones (IDs excluídos intencionalmente em qualquer um dos aparelhos)
+  const unionDeletedSet = new Set([
+    ...(targetState.deletedIds || []),
+    ...(Array.isArray(sourceState.deletedIds) ? sourceState.deletedIds : [])
+  ]);
+  if (unionDeletedSet.size !== targetState.deletedIds.length) {
+    targetState.deletedIds = Array.from(unionDeletedSet).slice(-500);
+    addedAny = true;
+  }
+
+  // Remove do target itens não-protegidos que foram explicitamente excluídos no outro aparelho
+  if (unionDeletedSet.size > 0) {
+    targetState.transactions = targetState.transactions.filter(
+      t => !unionDeletedSet.has(t.id) || (typeof isTransactionProtected === 'function' && isTransactionProtected(t))
+    );
+    targetState.uploadedFiles = targetState.uploadedFiles.filter(
+      f => !unionDeletedSet.has(f.id) || (typeof isUploadedFileProtected === 'function' && isUploadedFileProtected(f))
+    );
+    targetState.dailyExpenses = targetState.dailyExpenses.filter(d => !unionDeletedSet.has(d.id));
+    targetState.futureGoals = targetState.futureGoals.filter(g => !unionDeletedSet.has(g.id));
+  }
+
+  // 2. União de Transações (Oficiais + Manuais + Prints de Cartão + Conta)
   const txSignature = (t) => {
     const amt = typeof toCents === 'function' ? toCents(t.amount) : Math.round((Number(t.amount) || 0) * 100);
     const normDesc = String(t.desc || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 20);
@@ -453,10 +482,10 @@ function mergeProtectedItemsIntoTarget(targetState, sourceState) {
 
   const targetTxIds = new Set(targetState.transactions.map(t => t.id));
   const targetTxSigs = new Set(targetState.transactions.map(txSignature));
-  const sourceProtectedTx = (sourceState.transactions || []).filter(
-    t => !t.isAutoProjected && typeof isTransactionProtected === 'function' && isTransactionProtected(t)
+  const sourceRealTx = (sourceState.transactions || []).filter(
+    t => t && !t.isAutoProjected && !unionDeletedSet.has(t.id)
   );
-  sourceProtectedTx.forEach(pt => {
+  sourceRealTx.forEach(pt => {
     const sig = txSignature(pt);
     if (!targetTxIds.has(pt.id) && !targetTxSigs.has(sig)) {
       targetState.transactions.push(pt);
@@ -466,18 +495,49 @@ function mergeProtectedItemsIntoTarget(targetState, sourceState) {
     }
   });
 
-  const fileSignature = (f) => `${String(f.fileName || '').toLowerCase()}|${f.period || ''}|${f.fileType || ''}`;
+  // 3. União de Arquivos Enviados (OFX, PDF e Fotos/Prints de Cartão)
+  const fileSignature = (f) => `${String(f.fileName || '').toLowerCase()}|${f.period || ''}|${f.fileType || ''}|${f.targetAccount || ''}`;
   const targetFileIds = new Set(targetState.uploadedFiles.map(f => f.id));
   const targetFileSigs = new Set(targetState.uploadedFiles.map(fileSignature));
-  const sourceProtectedFiles = (sourceState.uploadedFiles || []).filter(
-    f => typeof isUploadedFileProtected === 'function' && isUploadedFileProtected(f)
+  const sourceFiles = (sourceState.uploadedFiles || []).filter(
+    f => f && !unionDeletedSet.has(f.id)
   );
-  sourceProtectedFiles.forEach(pf => {
+  sourceFiles.forEach(pf => {
     const fSig = fileSignature(pf);
     if (!targetFileIds.has(pf.id) && !targetFileSigs.has(fSig)) {
       targetState.uploadedFiles.push(pf);
       targetFileIds.add(pf.id);
       targetFileSigs.add(fSig);
+      addedAny = true;
+    }
+  });
+
+  // 4. União de Controle Diário (dailyExpenses)
+  const targetDailyIds = new Set(targetState.dailyExpenses.map(d => d.id));
+  (sourceState.dailyExpenses || []).forEach(d => {
+    if (d && d.id && !unionDeletedSet.has(d.id) && !targetDailyIds.has(d.id)) {
+      targetState.dailyExpenses.push(d);
+      targetDailyIds.add(d.id);
+      addedAny = true;
+    }
+  });
+
+  // 5. União de Metas da Família (futureGoals)
+  const targetGoalIds = new Set(targetState.futureGoals.map(g => g.id));
+  (sourceState.futureGoals || []).forEach(g => {
+    if (g && g.id && !unionDeletedSet.has(g.id) && !targetGoalIds.has(g.id)) {
+      targetState.futureGoals.push(g);
+      targetGoalIds.add(g.id);
+      addedAny = true;
+    }
+  });
+
+  // 6. União de Categorias Personalizadas e Fontes Importadas
+  const targetCats = new Set(targetState.customCategories);
+  (sourceState.customCategories || []).forEach(c => {
+    if (c && !targetCats.has(c)) {
+      targetState.customCategories.push(c);
+      targetCats.add(c);
       addedAny = true;
     }
   });
@@ -508,7 +568,7 @@ async function pushStateToSupabaseCloud(silent) {
   try {
     const householdCode = cloudConfig.householdCode || 'casal_eveli_vital';
 
-    // Antes de sobrescrever a nuvem, verifica se a nuvem já possui arquivos/lançamentos protegidos que ainda não estão neste aparelho
+    // Pull-Before-Push Atômico: antes de gravar na nuvem, une todos os itens da nuvem (inclusive manuais e prints do celular)
     const existingCloud = await fetchHouseholdRowDirect(householdCode);
     if (existingCloud && existingCloud.data && existingCloud.data.state_json) {
       const cloudSanitized = sanitizeState(existingCloud.data.state_json, householdCode);
@@ -521,6 +581,8 @@ async function pushStateToSupabaseCloud(silent) {
 
     const cleanPayload = {
       ...state,
+      // No banco compartilhado, mantém sempre o mês padrão ativo ('2026-10') para nunca jogar o outro aparelho em um mês futuro vazio
+      selectedPeriod: (state.selectedPeriod && state.selectedPeriod <= '2026-10') ? state.selectedPeriod : '2026-10',
       // Não precisa salvar parcelas auto-projetadas no banco, pois o motor recria ao abrir
       transactions: (state.transactions || []).filter(t => !t.isAutoProjected)
     };
@@ -557,27 +619,48 @@ async function pushStateToSupabaseCloud(silent) {
   }
 }
 
-// Aplica no app os dados recebidos da nuvem (com mesclagem protetora de documentos e meses anteriores e reenvio automático se o aparelho local tiver arquivos novos)
+// Aplica no app os dados recebidos da nuvem (preservando os filtros visuais da tela local e unindo 100% dos registros via CRDT)
 function applyIncomingState(incomingJson, updatedBy, cloudUpdatedAt) {
   if (!incomingJson) return;
   try {
     const householdCode = cloudConfig.householdCode || 'casal_eveli_vital';
     const incoming = sanitizeState(incomingJson, householdCode);
 
-    // Garante que nenhum documento oficial (.OFX / .PDF) ou registro de mês anterior já salvo localmente (ex: no notebook) seja perdido
+    // Une todos os lançamentos, prints, despesas diárias e metas locais com os que vieram da nuvem
     const localHasMoreProtectedData = mergeProtectedItemsIntoTarget(incoming, state);
 
     const baseData = typeof getBaseDataForHousehold === 'function'
       ? getBaseDataForHousehold(householdCode, getLoggedPerson())
       : getInitialFamilyData();
 
+    // Preserva o estado de visualização (UI State) do aparelho atual para que mexer no celular não mude a aba/mês da tela do notebook
+    const currentTab = state?.activeTab || baseData.activeTab || 'overview';
+    const currentOwner = state?.selectedOwner || 'ALL';
+    const currentScope = state?.selectedScope || 'ALL';
+    const currentIncludeBill = state?.includeCurrentCardBill !== undefined ? state.includeCurrentCardBill : false;
+    let currentPeriod = state?.selectedPeriod || '2026-10';
+
+    const hasRealTxInCurrentPeriod = (incoming.transactions || []).some(
+      t => !t.isAutoProjected && t.period === currentPeriod
+    );
+    if (currentPeriod > '2026-10' && !hasRealTxInCurrentPeriod) {
+      currentPeriod = '2026-10';
+    }
+
     state = {
       ...baseData,
       ...incoming,
+      activeTab: currentTab,
+      selectedPeriod: currentPeriod,
+      selectedOwner: currentOwner,
+      selectedScope: currentScope,
+      includeCurrentCardBill: currentIncludeBill,
       transactions: enrichTransactionsAndProjectInstallments(incoming.transactions || [])
     };
 
-    if (typeof localStorage !== 'undefined') {
+    if (typeof saveLocalStateOnly === 'function') {
+      saveLocalStateOnly();
+    } else if (typeof localStorage !== 'undefined') {
       try {
         const storageKey = typeof getActiveStorageKey === 'function' ? getActiveStorageKey() : STORAGE_KEY;
         localStorage.setItem(storageKey, JSON.stringify(state));

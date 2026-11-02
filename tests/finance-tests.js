@@ -113,8 +113,8 @@ runTest('2. Isolamento estrito de cartões: Setembro (Fatura Oficial R$ 3.375,50
   const sumOct = ctx.calculatePeriodSummary(octTx, '2026-10');
   assert.strictEqual(sumSep.cardEveliCents, 337550); // Setembro isolado: R$ 3.375,50 (Fatura Oficial fat-set.pdf)
   assert.strictEqual(sumOct.cardEveliCents, 309611); // Outubro isolado: R$ 3.096,11 (Fatura Oficial fat-out.pdf)
-  assert.strictEqual(sumSep.cardMaridoCents, 93897); // Cartão Vital Setembro: R$ 938,97 (15 compras dos prints)
-  assert.strictEqual(sumOct.cardMaridoCents, 42325); // Cartão Vital Outubro: R$ 423,25 (6 compras dos prints)
+  assert.strictEqual(sumSep.cardMaridoCents, 103165); // Cartão Vital Setembro: R$ 1.031,65 (17 compras dos prints)
+  assert.strictEqual(sumOct.cardMaridoCents, 115735); // Cartão Vital Outubro: R$ 1.157,35 (18 compras dos prints)
 });
 
 runTest('3. Saldo final da Conta Conjunta Itaú em Outubro/2026 (R$ 39,41)', () => {
@@ -281,7 +281,7 @@ runTest('13. Isolamento estrito de meses e Consolidado Geral Conta vs Cartões',
   assert.ok(rowOct);
   assert.strictEqual(rowOct.monthlyNetCents, rowOct.incomeCents - rowOct.bankDebitCents);
   assert.ok(consolidated.totals.initialBaseStartBalanceCents !== undefined);
-  assert.strictEqual(consolidated.totals.totalCardVitalCents, 136222); // Cartão Vital: R$ 938,97 (Set) + R$ 423,25 (Out) = R$ 1.362,22
+  assert.strictEqual(consolidated.totals.totalCardVitalCents, 218900); // Cartão Vital: R$ 1.031,65 (Set) + R$ 1.157,35 (Out) = R$ 2.189,00
 });
 
 runTest('14. Poupança Caixa: isolamento da conta corrente Itaú e soma no Patrimônio Total', () => {
@@ -739,7 +739,7 @@ runTest('26. Saldo Anterior: Apenas Setembro/2026 é editável e todos os outros
   st.selectedPeriod = origPeriod;
 });
 
-runTest('27. Sincronia Total Notebook + Celular: Unificação automática dos 6 arquivos oficiais (222 lançamentos)', () => {
+runTest('27. Sincronia Total Notebook + Celular: Unificação automática dos 6 arquivos oficiais (236 lançamentos)', () => {
   // Simula o estado antigo do Celular (semente parcial cc_1..cc_5 com 0 arquivos) + 1 lançamento manual
   const legacyCellState = {
     transactions: [
@@ -751,8 +751,8 @@ runTest('27. Sincronia Total Notebook + Celular: Unificação automática dos 6 
   };
 
   const unified = ctx.sanitizeState(legacyCellState, 'casal_eveli_vital');
-  // Deve conter exatamente os 222 lançamentos oficiais + 1 manual = 223 lançamentos base
-  assert.strictEqual(unified.transactions.length, 223, 'Estado do celular deve ser atualizado para os 222 lançamentos oficiais + 1 manual');
+  // Deve conter exatamente os 236 lançamentos oficiais + 1 manual = 237 lançamentos base
+  assert.strictEqual(unified.transactions.length, 237, 'Estado do celular deve ser atualizado para os 236 lançamentos oficiais + 1 manual');
   assert.strictEqual(unified.uploadedFiles.length, 6, 'Deve conter os 6 documentos oficiais (2 OFX, 2 PDFs e 2 pacotes de Prints do Cartão Vital)');
   assert.strictEqual(unified.transactions.some(t => t.id === 'manual_user_1'), true, 'Lançamento manual do usuário é preservado');
 });
@@ -762,7 +762,7 @@ runTest('28. Cartão Vital (Prints / Manual): Lançamentos e OCR de múltiplos p
   const origTx = [...st.transactions];
 
   const beforeOct = ctx.calculatePeriodSummary(st.transactions.filter(t => t.period === '2026-10'), '2026-10');
-  assert.strictEqual(beforeOct.cardMaridoCents, 42325, 'Cartão Vital inicia com os R$ 423,25 dos prints de Out/2026');
+  assert.strictEqual(beforeOct.cardMaridoCents, 115735, 'Cartão Vital inicia com os R$ 1.157,35 dos prints de Out/2026');
 
   // 1. Testa o leitor inteligente de prints do app (parseCardPrintOcrText) com o formato exato dos prints do Vital
   const samplePrintOcr = [
@@ -826,6 +826,48 @@ runTest('28. Cartão Vital (Prints / Manual): Lançamentos e OCR de múltiplos p
 
   // Restaura transações originais
   st.transactions = origTx;
+});
+
+runTest('29. Arquitetura CRDT Set-Union + Tombstones e Isolamento de UI State (Celular <-> Notebook)', () => {
+  // 1. Celular adiciona compra manual no Cartão Vital, foto de print e gasto diário, e navega para Nov/26 ('2026-11') na aba 'investments'
+  const cellState = {
+    activeTab: 'investments',
+    selectedPeriod: '2026-11',
+    transactions: [
+      { id: 'cell_manual_vital_1', isManual: true, owner: 'Vital', accountId: 'card_marido', period: '2026-10', date: '30/10/2026', type: 'card', kind: 'expense', desc: 'Compra feita pelo Celular', amount: 99.90 }
+    ],
+    uploadedFiles: [
+      { id: 'cell_print_photo_1', fileName: 'print_celular.jpg', fileType: 'receipt_photo', period: '2026-10', targetAccount: 'card_marido', itemCount: 1, totalAmount: 99.90 }
+    ],
+    dailyExpenses: [
+      { id: 'cell_daily_1', date: '30/10/2026', period: '2026-10', desc: 'Lanche Celular', amount: 25.00, direction: 'expense', paymentMethod: 'pix', cardHolder: 'Vital' }
+    ],
+    futureGoals: [],
+    deletedIds: ['notebook_old_deleted_tx']
+  };
+
+  // 2. Notebook está na aba 'cards' no mês '2026-10' e possui um lançamento que foi excluído no celular ('notebook_old_deleted_tx') + um lançamento próprio ('notebook_manual_eveli_1')
+  const notebookState = {
+    activeTab: 'cards',
+    selectedPeriod: '2026-10',
+    transactions: [
+      { id: 'notebook_manual_eveli_1', isManual: true, owner: 'Éveli', accountId: 'card_eveli_5544', period: '2026-10', date: '30/10/2026', type: 'card', kind: 'expense', desc: 'Compra feita pelo Notebook', amount: 50.00 },
+      { id: 'notebook_old_deleted_tx', isManual: true, owner: 'Éveli', accountId: 'cc_itau_conjunta', period: '2026-10', date: '28/10/2026', type: 'debit', kind: 'expense', desc: 'Item Excluído', amount: 10.00 }
+    ],
+    uploadedFiles: [],
+    dailyExpenses: [],
+    futureGoals: [],
+    deletedIds: []
+  };
+
+  // Quando o Notebook mescla com o estado do Celular via CRDT Set-Union:
+  ctx.mergeProtectedItemsIntoTarget(notebookState, cellState);
+
+  assert.strictEqual(notebookState.transactions.some(t => t.id === 'cell_manual_vital_1'), true, 'Lançamento manual criado no celular deve ser preservado no notebook');
+  assert.strictEqual(notebookState.transactions.some(t => t.id === 'notebook_manual_eveli_1'), true, 'Lançamento manual criado no notebook deve ser preservado');
+  assert.strictEqual(notebookState.transactions.some(t => t.id === 'notebook_old_deleted_tx'), false, 'Item em deletedIds (Tombstone) deve ser removido em ambos os aparelhos');
+  assert.strictEqual(notebookState.uploadedFiles.some(f => f.id === 'cell_print_photo_1'), true, 'Foto de print enviada pelo celular deve ser preservada no notebook');
+  assert.strictEqual(notebookState.dailyExpenses.some(d => d.id === 'cell_daily_1'), true, 'Gasto diário criado no celular deve ser preservado no notebook');
 });
 
 console.log(`\n🎉 Resultado Final: ${passed} testes aprovados com sucesso!`);
