@@ -329,13 +329,122 @@ async function signOutSupabase() {
   }
 }
 
+let lastAutoPullTimestamp = 0;
+let lastAppliedCloudUpdatedAt = null;
+
+// Helpers REST diretos usando a Anon Key (imunes a relógio adiantado em 2026 ou token OAuth expirado no notebook)
+async function fetchHouseholdRowDirect(householdCode) {
+  const baseUrl = (cloudConfig.supabaseUrl || '').trim().replace(/\/+$/, '');
+  const anonKey = (cloudConfig.supabaseAnonKey || '').trim();
+
+  if (baseUrl && anonKey && typeof fetch === 'function') {
+    try {
+      const endpoint = `${baseUrl}/rest/v1/household_state_sync?household_code=eq.${encodeURIComponent(householdCode)}&select=state_json,updated_by,updated_at&limit=1`;
+      const res = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+          'apikey': anonKey,
+          'Authorization': `Bearer ${anonKey}`,
+          'Accept': 'application/json'
+        },
+        cache: 'no-store'
+      });
+      if (res.ok) {
+        const rows = await res.json();
+        return { data: Array.isArray(rows) && rows.length > 0 ? rows[0] : null, error: null };
+      }
+    } catch (e) {}
+  }
+
+  const client = getSupabaseClient();
+  if (!client) return { data: null, error: new Error('Cliente Supabase indisponível') };
+  return await client
+    .from('household_state_sync')
+    .select('state_json, updated_by, updated_at')
+    .eq('household_code', householdCode)
+    .maybeSingle();
+}
+
+async function upsertHouseholdRowDirect(rowPayload) {
+  const baseUrl = (cloudConfig.supabaseUrl || '').trim().replace(/\/+$/, '');
+  const anonKey = (cloudConfig.supabaseAnonKey || '').trim();
+
+  if (baseUrl && anonKey && typeof fetch === 'function') {
+    try {
+      const endpoint = `${baseUrl}/rest/v1/household_state_sync?on_conflict=household_code`;
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'apikey': anonKey,
+          'Authorization': `Bearer ${anonKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'resolution=merge-duplicates,return=minimal'
+        },
+        body: JSON.stringify(rowPayload)
+      });
+      if (res.ok) {
+        return { error: null };
+      }
+    } catch (e) {}
+  }
+
+  const client = getSupabaseClient();
+  if (!client) return { error: new Error('Cliente Supabase indisponível') };
+  return await client
+    .from('household_state_sync')
+    .upsert(rowPayload, { onConflict: 'household_code' });
+}
+
+// Mescla itens protegidos (OFX/PDF/meses fechados) de uma fonte externa sem perder nada
+function mergeProtectedItemsIntoTarget(targetState, sourceState) {
+  let addedAny = false;
+  if (!targetState || !sourceState) return addedAny;
+
+  if (!Array.isArray(targetState.transactions)) targetState.transactions = [];
+  if (!Array.isArray(targetState.uploadedFiles)) targetState.uploadedFiles = [];
+  if (!Array.isArray(targetState.importedSources)) targetState.importedSources = [];
+
+  const targetTxIds = new Set(targetState.transactions.map(t => t.id));
+  const sourceProtectedTx = (sourceState.transactions || []).filter(
+    t => !t.isAutoProjected && typeof isTransactionProtected === 'function' && isTransactionProtected(t)
+  );
+  sourceProtectedTx.forEach(pt => {
+    if (!targetTxIds.has(pt.id)) {
+      targetState.transactions.push(pt);
+      targetTxIds.add(pt.id);
+      addedAny = true;
+    }
+  });
+
+  const targetFileIds = new Set(targetState.uploadedFiles.map(f => f.id));
+  const sourceProtectedFiles = (sourceState.uploadedFiles || []).filter(
+    f => typeof isUploadedFileProtected === 'function' && isUploadedFileProtected(f)
+  );
+  sourceProtectedFiles.forEach(pf => {
+    if (!targetFileIds.has(pf.id)) {
+      targetState.uploadedFiles.push(pf);
+      targetFileIds.add(pf.id);
+      addedAny = true;
+    }
+  });
+
+  const targetSourceIds = new Set(targetState.importedSources.map(s => s.id));
+  (sourceState.importedSources || []).forEach(src => {
+    if (src && src.id && !targetSourceIds.has(src.id)) {
+      targetState.importedSources.push(src);
+      targetSourceIds.add(src.id);
+    }
+  });
+
+  return addedAny;
+}
+
 // Envia o estado atual da família para a tabela `household_state_sync` no Supabase
 async function pushStateToSupabaseCloud(silent) {
   if (!silent) saveCloudSettingsFromModal();
-  const client = getSupabaseClient();
   const feedbackEl = typeof document !== 'undefined' ? document.getElementById('cloudSyncFeedbackMsg') : null;
 
-  if (!client) {
+  if (!cloudConfig.supabaseUrl || !cloudConfig.supabaseAnonKey) {
     if (!silent) {
       alert('Para sincronizar em nuvem entre diferentes celulares/PCs, preencha a URL e a Anon Key do seu projeto Supabase.');
     }
@@ -343,24 +452,36 @@ async function pushStateToSupabaseCloud(silent) {
   }
 
   try {
+    const householdCode = cloudConfig.householdCode || 'casal_eveli_vital';
+
+    // Antes de sobrescrever a nuvem, verifica se a nuvem já possui arquivos/lançamentos protegidos que ainda não estão neste aparelho
+    const existingCloud = await fetchHouseholdRowDirect(householdCode);
+    if (existingCloud && existingCloud.data && existingCloud.data.state_json) {
+      const cloudSanitized = sanitizeState(existingCloud.data.state_json, householdCode);
+      const absorbedFromCloud = mergeProtectedItemsIntoTarget(state, cloudSanitized);
+      if (absorbedFromCloud) {
+        state.transactions = enrichTransactionsAndProjectInstallments(state.transactions || []);
+        if (typeof renderAll === 'function') renderAll();
+      }
+    }
+
     const cleanPayload = {
       ...state,
       // Não precisa salvar parcelas auto-projetadas no banco, pois o motor recria ao abrir
       transactions: (state.transactions || []).filter(t => !t.isAutoProjected)
     };
 
-    const householdCode = cloudConfig.householdCode || 'casal_eveli_vital';
-    const { error } = await client
-      .from('household_state_sync')
-      .upsert({
-        household_code: householdCode,
-        state_json: cleanPayload,
-        updated_by: getLoggedPerson(),
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'household_code' });
+    const updatedAtIso = new Date().toISOString();
+    const { error } = await upsertHouseholdRowDirect({
+      household_code: householdCode,
+      state_json: cleanPayload,
+      updated_by: getLoggedPerson(),
+      updated_at: updatedAtIso
+    });
 
     if (error) throw error;
 
+    lastAppliedCloudUpdatedAt = updatedAtIso;
     const now = new Date();
     cloudConfig.lastSyncAt = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     saveCloudConfig();
@@ -382,37 +503,18 @@ async function pushStateToSupabaseCloud(silent) {
   }
 }
 
-// Aplica no app os dados recebidos da nuvem (com mesclagem protetora de documentos e meses anteriores)
-function applyIncomingState(incomingJson, updatedBy) {
+// Aplica no app os dados recebidos da nuvem (com mesclagem protetora de documentos e meses anteriores e reenvio automático se o aparelho local tiver arquivos novos)
+function applyIncomingState(incomingJson, updatedBy, cloudUpdatedAt) {
   if (!incomingJson) return;
   try {
-    const incoming = sanitizeState(incomingJson);
+    const householdCode = cloudConfig.householdCode || 'casal_eveli_vital';
+    const incoming = sanitizeState(incomingJson, householdCode);
 
-    // Garante que nenhum documento oficial (.OFX / .PDF) ou registro de mês anterior já salvo localmente seja perdido na sincronização
-    const localProtectedTx = (state && Array.isArray(state.transactions))
-      ? state.transactions.filter(t => !t.isAutoProjected && typeof isTransactionProtected === 'function' && isTransactionProtected(t))
-      : [];
-    const incomingTxIds = new Set((incoming.transactions || []).map(t => t.id));
-    localProtectedTx.forEach(pt => {
-      if (!incomingTxIds.has(pt.id)) {
-        incoming.transactions.push(pt);
-        incomingTxIds.add(pt.id);
-      }
-    });
-
-    const localProtectedFiles = (state && Array.isArray(state.uploadedFiles))
-      ? state.uploadedFiles.filter(f => typeof isUploadedFileProtected === 'function' && isUploadedFileProtected(f))
-      : [];
-    const incomingFileIds = new Set((incoming.uploadedFiles || []).map(f => f.id));
-    localProtectedFiles.forEach(pf => {
-      if (!incomingFileIds.has(pf.id)) {
-        incoming.uploadedFiles.push(pf);
-        incomingFileIds.add(pf.id);
-      }
-    });
+    // Garante que nenhum documento oficial (.OFX / .PDF) ou registro de mês anterior já salvo localmente (ex: no notebook) seja perdido
+    const localHasMoreProtectedData = mergeProtectedItemsIntoTarget(incoming, state);
 
     const baseData = typeof getBaseDataForHousehold === 'function'
-      ? getBaseDataForHousehold(cloudConfig.householdCode, getLoggedPerson())
+      ? getBaseDataForHousehold(householdCode, getLoggedPerson())
       : getInitialFamilyData();
 
     state = {
@@ -428,25 +530,34 @@ function applyIncomingState(incomingJson, updatedBy) {
       } catch (e) {}
     }
 
+    if (cloudUpdatedAt) {
+      lastAppliedCloudUpdatedAt = cloudUpdatedAt;
+    }
+
     const now = new Date();
     cloudConfig.lastSyncAt = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     saveCloudConfig();
     updateAuthHeaderUI();
     if (typeof renderAll === 'function') renderAll();
+
+    // Se este aparelho (ex: Notebook) tinha arquivos OFX/PDF ou lançamentos oficiais que ainda não estavam na nuvem,
+    // envia automaticamente o estado completo de volta para a nuvem para atualizar o Celular!
+    if (localHasMoreProtectedData) {
+      setTimeout(() => {
+        pushStateToSupabaseCloud(true);
+      }, 400);
+    }
   } catch (err) {
     console.error('Erro ao aplicar dados recebidos da nuvem:', err);
   }
 }
 
-let lastAutoPullTimestamp = 0;
-
 // Baixa os dados mais recentes da família salvos na nuvem do Supabase
 async function pullStateFromSupabaseCloud(silent) {
   if (!silent) saveCloudSettingsFromModal();
-  const client = getSupabaseClient();
   const feedbackEl = typeof document !== 'undefined' ? document.getElementById('cloudSyncFeedbackMsg') : null;
 
-  if (!client) {
+  if (!cloudConfig.supabaseUrl || !cloudConfig.supabaseAnonKey) {
     if (!silent) {
       alert('Preencha a URL e a Anon Key do Supabase para buscar os dados da nuvem.');
     }
@@ -456,11 +567,7 @@ async function pullStateFromSupabaseCloud(silent) {
   try {
     lastAutoPullTimestamp = Date.now();
     const householdCode = cloudConfig.householdCode || 'casal_eveli_vital';
-    const { data, error } = await client
-      .from('household_state_sync')
-      .select('state_json, updated_by, updated_at')
-      .eq('household_code', householdCode)
-      .maybeSingle();
+    const { data, error } = await fetchHouseholdRowDirect(householdCode);
 
     if (error) throw error;
     if (!data || !data.state_json) {
@@ -470,16 +577,35 @@ async function pullStateFromSupabaseCloud(silent) {
         if (typeof switchActiveHouseholdState === 'function') {
           switchActiveHouseholdState(householdCode, getLoggedPerson());
         }
+      } else {
+        // Se for a conta do casal e a nuvem ainda estiver vazia, envia os dados locais para a nuvem automaticamente
+        pushStateToSupabaseCloud(true);
       }
       if (!silent && feedbackEl) {
         feedbackEl.className = 'text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-2.5 mt-2';
-        feedbackEl.textContent = 'Ainda não há dados salvos na nuvem para este código de família. Clique primeiro em "Enviar p/ Nuvem".';
+        feedbackEl.textContent = 'Sincronizando base inicial com a nuvem...';
         feedbackEl.classList.remove('hidden');
       }
       return false;
     }
 
-    applyIncomingState(data.state_json, data.updated_by);
+    // Se este aparelho já tem arquivos/lançamentos locais que faltam na nuvem, ou se a nuvem mudou, aplica e sincroniza
+    const incomingFilesCount = Array.isArray(data.state_json.uploadedFiles) ? data.state_json.uploadedFiles.length : 0;
+    const localFilesCount = Array.isArray(state?.uploadedFiles) ? state.uploadedFiles.length : 0;
+    const incomingTxCount = Array.isArray(data.state_json.transactions) ? data.state_json.transactions.length : 0;
+    const localRealTxCount = Array.isArray(state?.transactions) ? state.transactions.filter(t => !t.isAutoProjected).length : 0;
+
+    if (
+      silent &&
+      lastAppliedCloudUpdatedAt &&
+      data.updated_at === lastAppliedCloudUpdatedAt &&
+      localFilesCount <= incomingFilesCount &&
+      localRealTxCount <= incomingTxCount
+    ) {
+      return true;
+    }
+
+    applyIncomingState(data.state_json, data.updated_by, data.updated_at);
 
     if (!silent && feedbackEl) {
       feedbackEl.className = 'text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 mt-2';
@@ -564,4 +690,17 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
       pullStateFromSupabaseCloud(true);
     }
   });
+
+  // Verificação silenciosa a cada 15s (só renderiza se a nuvem tiver mudança nova ou se faltar subir arquivos locais)
+  setInterval(() => {
+    if (
+      typeof document !== 'undefined' &&
+      document.visibilityState === 'visible' &&
+      cloudConfig.supabaseUrl &&
+      typeof authState !== 'undefined' &&
+      authState.isUnlocked
+    ) {
+      pullStateFromSupabaseCloud(true);
+    }
+  }, 15000);
 }
