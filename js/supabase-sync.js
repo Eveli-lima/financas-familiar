@@ -129,22 +129,63 @@ function getSupabaseClient() {
 function updateAuthHeaderUI() {
   if (typeof document === 'undefined') return;
 
+  const person = getLoggedPerson();
+  const email = (cloudConfig.loggedEmail || '').trim();
+  const fullName = (cloudConfig.loggedFullName || '').trim();
+  const coupleMode = typeof isCoupleHousehold === 'function' ? isCoupleHousehold(cloudConfig.householdCode) : true;
+  const accountTypeLabel = coupleMode ? 'Conta do Casal (Éveli & Vital)' : `Conta Individual (${person})`;
+
   const personBadge = document.getElementById('loggedPersonBadgeText');
   if (personBadge) {
-    personBadge.textContent = getLoggedPerson();
+    personBadge.textContent = `👤 ${person}`;
+  }
+
+  const accountSubBadge = document.getElementById('loggedAccountSubBadge');
+  if (accountSubBadge) {
+    accountSubBadge.textContent = email
+      ? `• ${email}`
+      : (coupleMode ? '• Conta do Casal' : '• Conta Individual');
   }
 
   const authUserBadge = document.getElementById('headerAuthUserBadge');
   if (authUserBadge) {
-    authUserBadge.textContent = `Bloquear (${getLoggedPerson()})`;
+    authUserBadge.textContent = `Bloquear (${person})`;
   }
 
   const headerSubtitle = document.getElementById('headerSubtitleText');
   if (headerSubtitle) {
-    const coupleMode = typeof isCoupleHousehold === 'function' ? isCoupleHousehold(cloudConfig.householdCode) : true;
-    headerSubtitle.textContent = coupleMode
-      ? 'Éveli & Vital • Itaú + Poupança + 2 Cartões'
-      : `${getLoggedPerson()} • Gestão Financeira Pessoal & Familiar`;
+    if (coupleMode) {
+      headerSubtitle.textContent = email
+        ? `Conectado por: ${person} (${email}) • Conta do Casal`
+        : `Conectado por: ${person} • Conta Oficial Éveli & Vital`;
+    } else {
+      headerSubtitle.textContent = email
+        ? `Conectado por: ${person} (${email}) • Conta Individual`
+        : `${person} • Gestão Financeira Pessoal & Familiar`;
+    }
+  }
+
+  const modalSummaryEl = document.getElementById('modalActiveAccountSummary');
+  if (modalSummaryEl) {
+    const displayUser = (fullName && fullName.toLowerCase() !== person.toLowerCase())
+      ? `${person} (${fullName})`
+      : person;
+    modalSummaryEl.innerHTML = `
+      <div class="flex flex-col gap-1 text-xs">
+        <div class="flex items-center justify-between">
+          <span class="text-slate-500">Pessoa logada agora:</span>
+          <strong class="text-emerald-700 font-bold">🟢 ${escapeHtml(displayUser)}</strong>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-slate-500">Conta / E-mail de acesso:</span>
+          <strong class="text-slate-800">${escapeHtml(email || 'Senha Familiar Direta')}</strong>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-slate-500">Ambiente ativo:</span>
+          <strong class="text-sky-900">${escapeHtml(accountTypeLabel)}</strong>
+        </div>
+      </div>
+    `;
   }
 
   const syncDot = document.getElementById('cloudSyncStatusDot');

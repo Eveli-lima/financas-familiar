@@ -257,9 +257,17 @@ function renderAll() {
           </div>
         </div>
 
-        <div class="mt-3 pt-2.5 border-t border-sky-100 flex items-center justify-between text-[11px]">
-          <span class="text-slate-500">Vencimento: <strong>dia ${cfg.dueDay}</strong></span>
-          <button onclick="setActiveTab('cards')" class="text-sky-700 hover:text-sky-900 font-semibold underline">Ver Fatura →</button>
+        <div class="mt-3 pt-2.5 border-t border-sky-100 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+          <div class="flex items-center gap-1.5">
+            <button onclick="openCardPrintEntryModal('${cardId}')" class="bg-sky-600 hover:bg-sky-700 text-white font-bold px-2.5 py-1 rounded-lg shadow-2xs transition cursor-pointer flex items-center gap-1" title="Lançar valores ou compras olhando os prints do cartão">
+              <span>➕</span>
+              <span>Lançar Gastos / Print</span>
+            </button>
+            <button onclick="openCardSettingsModal('${cardId}')" class="bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-semibold px-2 py-1 rounded-lg transition cursor-pointer" title="Configurar limite e vencimento">
+              ⚙️
+            </button>
+          </div>
+          <button onclick="setActiveTab('cards')" class="text-sky-700 hover:text-sky-900 font-semibold underline cursor-pointer">Ver Fatura →</button>
         </div>
       </div>
     `;

@@ -228,10 +228,21 @@
             ₣
           </div>
           <div>
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
               <h1 class="font-bold text-sm sm:text-base md:text-lg text-slate-900 tracking-tight leading-tight">Finanças do Casal</h1>
+              <button
+                type="button"
+                onclick="openAuthCloudModal()"
+                id="headerLoggedUserChip"
+                class="inline-flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200/90 px-2.5 py-0.5 rounded-full text-[11px] font-bold transition shadow-2xs cursor-pointer"
+                title="Clique para ver os detalhes da conta conectada ou alternar perfil"
+              >
+                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span id="loggedPersonBadgeText">👤 Éveli</span>
+                <span id="loggedAccountSubBadge" class="text-[10px] font-medium text-emerald-700/90 hidden sm:inline">• Conta do Casal</span>
+              </button>
             </div>
-            <p id="headerSubtitleText" class="text-[11px] sm:text-xs text-sky-800/70 font-medium">Éveli & Vital • Itaú + Poupança + 2 Cartões</p>
+            <p id="headerSubtitleText" class="text-[11px] sm:text-xs text-sky-800/80 font-medium mt-0.5">Conectado por: Éveli • Conta Oficial Éveli & Vital</p>
           </div>
         </div>
 
@@ -605,8 +616,12 @@
             Acompanhe compras, limites, parcelamentos futuros e importe suas faturas oficiais em formato PDF
           </p>
         </div>
-        <div>
-          <button onclick="document.getElementById('cardPdfFileInput').click()" class="text-xs bg-sky-600 hover:bg-sky-700 text-white font-semibold px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5" title="Selecione o arquivo PDF da fatura do cartão">
+        <div class="flex flex-wrap items-center gap-2">
+          <button onclick="openCardPrintEntryModal('card_marido')" class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer" title="Lançar gastos no Cartão Vital a partir de prints ou manualmente">
+            <span>📸</span>
+            <span>Lançar Cartão Vital (Prints / Manual)</span>
+          </button>
+          <button onclick="document.getElementById('cardPdfFileInput').click()" class="text-xs bg-sky-600 hover:bg-sky-700 text-white font-semibold px-4 py-2.5 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer" title="Selecione o arquivo PDF da fatura do cartão">
             <span>📥</span>
             <span>Importar Fatura em PDF (.pdf)</span>
           </button>
@@ -1346,6 +1361,11 @@
       </div>
 
       <div class="space-y-3.5 text-xs overflow-y-auto custom-scroll flex-1 pr-1">
+        <!-- Resumo da Conta Conectada no Momento -->
+        <div id="modalActiveAccountSummary" class="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200/80">
+          <div class="text-xs text-emerald-950">Carregando dados da sessão...</div>
+        </div>
+
         <!-- 1. Seleção de Quem Está Usando o Dispositivo -->
         <div class="p-3.5 rounded-2xl bg-sky-50/70 border border-sky-200/70">
           <label class="block font-bold text-sky-950 text-xs mb-1">
@@ -1918,18 +1938,170 @@
   </div>
 
   <!-- =================================================================== -->
+  <!-- MODAL 11: LANÇAR GASTOS DO CARTÃO VIA PRINTS / FOTOS OU MANUAL      -->
+  <!-- =================================================================== -->
+  <div id="cardPrintEntryModal" onclick="if(event.target === this) closeCardPrintEntryModal()" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden p-5 sm:p-6 shadow-2xl border border-indigo-200">
+      <!-- Cabeçalho -->
+      <div class="flex items-start justify-between gap-4 shrink-0 border-b border-indigo-100 pb-3 mb-3">
+        <div>
+          <span class="text-[11px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">
+            Sem PDF? Lance pelos Prints ou Valor da Fatura
+          </span>
+          <h3 class="text-base sm:text-lg font-bold text-slate-900 mt-1 flex items-center gap-2 flex-wrap">
+            <span>📸 Lançar Gastos no Cartão</span>
+            <span id="cardPrintModalHolderBadge" class="text-xs font-bold bg-indigo-600 text-white px-2.5 py-0.5 rounded-lg">Titular: Vital</span>
+          </h3>
+        </div>
+        <button type="button" onclick="closeCardPrintEntryModal()" class="text-slate-400 hover:text-slate-700 font-bold text-lg px-2 shrink-0 cursor-pointer" title="Fechar">✕</button>
+      </div>
+
+      <!-- Corpo Rolável -->
+      <div class="space-y-4 text-xs overflow-y-auto custom-scroll flex-1 pr-1">
+        <!-- Seleção de Cartão e Mês da Fatura -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-200/80">
+          <div>
+            <label class="block text-[10px] font-bold uppercase text-indigo-950 mb-1">Qual Cartão receberá os gastos?</label>
+            <select id="cardPrintModalAccountSelect" onchange="renderCardPrintModalItems()" class="w-full border border-indigo-300 rounded-xl px-3 py-2 bg-white font-bold text-indigo-950 text-xs">
+              <option value="card_marido">💳 Cartão Vital (Exclusivo Marido)</option>
+              <option value="card_eveli_5544">💳 Cartão Éveli (Itaú 5544)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold uppercase text-indigo-950 mb-1">Mês de Referência da Fatura</label>
+            <select id="cardPrintModalPeriodSelect" onchange="renderCardPrintModalItems()" class="w-full border border-indigo-300 rounded-xl px-3 py-2 bg-white font-bold text-slate-800 text-xs">
+            </select>
+          </div>
+        </div>
+
+        <!-- Opção 1: Lançar Compra Rápida ou Total do Print -->
+        <div class="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-3">
+          <div class="flex items-center justify-between flex-wrap gap-1">
+            <h4 class="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+              <span class="w-5 h-5 rounded-full bg-indigo-600 text-white inline-flex items-center justify-center text-[11px] font-bold">1</span>
+              Digitar Compra do Print (ou Valor Total da Fatura)
+            </h4>
+            <span class="text-[10px] text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+              Cai apenas no cartão selecionado acima
+            </span>
+          </div>
+
+          <form onsubmit="submitSingleCardPrintEntry(event)" class="space-y-2.5">
+            <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+              <div class="sm:col-span-3">
+                <label class="block text-[10px] font-semibold uppercase text-slate-600 mb-1">Data</label>
+                <input id="cardPrintSingleDateInput" type="text" placeholder="DD/MM/AAAA" required class="w-full border border-slate-300 rounded-xl px-2.5 py-2 text-xs text-slate-800" />
+              </div>
+              <div class="sm:col-span-5">
+                <label class="block text-[10px] font-semibold uppercase text-slate-600 mb-1">Estabelecimento / Descrição</label>
+                <input id="cardPrintSingleDescInput" type="text" placeholder="Ex.: Mercado, Posto ou Resumo do Print" required class="w-full border border-slate-300 rounded-xl px-2.5 py-2 text-xs text-slate-800" />
+              </div>
+              <div class="sm:col-span-4">
+                <label class="block text-[10px] font-semibold uppercase text-slate-600 mb-1">Valor (R$)</label>
+                <input id="cardPrintSingleAmountInput" type="text" inputmode="decimal" placeholder="Ex.: 145,90" required class="w-full border border-indigo-300 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-900 bg-indigo-50/30" />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+              <div class="sm:col-span-5">
+                <label class="block text-[10px] font-semibold uppercase text-slate-600 mb-1">Categoria</label>
+                <select id="cardPrintSingleCategoryInput" class="w-full border border-slate-300 rounded-xl px-2.5 py-2 text-xs bg-white text-slate-800">
+                  <option value="Alimentação & Mercado">Alimentação & Mercado</option>
+                  <option value="Transporte & Combustível">Transporte & Combustível</option>
+                  <option value="Compras & Vestuário">Compras & Vestuário</option>
+                  <option value="Saúde & Farmácia">Saúde & Farmácia</option>
+                  <option value="Lazer & Restaurantes">Lazer & Restaurantes</option>
+                  <option value="Casa & Utilidades">Casa & Utilidades</option>
+                  <option value="Assinaturas & Serviços">Assinaturas & Serviços</option>
+                  <option value="Cartão de Crédito">Cartão de Crédito (Geral)</option>
+                </select>
+              </div>
+              <div class="sm:col-span-4">
+                <label class="block text-[10px] font-semibold uppercase text-slate-600 mb-1">Parcela (Opcional)</label>
+                <div class="flex items-center gap-1.5">
+                  <input id="cardPrintSingleInstCurInput" type="number" min="1" max="99" value="1" class="w-full border border-slate-300 rounded-xl px-2 py-2 text-xs text-center" title="Parcela atual" />
+                  <span class="text-slate-400 font-bold">/</span>
+                  <input id="cardPrintSingleInstTotInput" type="number" min="1" max="99" value="1" class="w-full border border-slate-300 rounded-xl px-2 py-2 text-xs text-center" title="Total de parcelas" />
+                </div>
+              </div>
+              <div class="sm:col-span-3">
+                <button type="submit" class="w-full py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition cursor-pointer">
+                  + Adicionar ao Cartão
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <!-- Opção 2: Colar várias linhas de uma vez + Anexar Foto do Print -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+            <h4 class="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+              <span class="w-5 h-5 rounded-full bg-slate-700 text-white inline-flex items-center justify-center text-[11px] font-bold">2</span>
+              Colar Lista / Texto Copiado do Print
+            </h4>
+            <p class="text-[11px] text-slate-500">
+              Se você copiou o texto do print no celular, cole abaixo (uma compra por linha, ex: <code>12/10 Posto Shell 150,00</code>):
+            </p>
+            <textarea id="cardPrintBatchTextarea" rows="3" placeholder="10/10 Supermercado 230,50&#10;14/10 Farmacia 89,90&#10;18/10 Loja 02/05 120,00" class="w-full border border-slate-300 rounded-xl p-2 text-xs bg-white font-mono"></textarea>
+            <button type="button" onclick="submitBatchCardPrintText()" class="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs transition cursor-pointer">
+              📥 Importar Linhas no Cartão
+            </button>
+          </div>
+
+          <div class="p-3.5 rounded-2xl bg-sky-50/60 border border-sky-200/80 space-y-2 flex flex-col justify-between">
+            <div class="space-y-1.5">
+              <h4 class="font-bold text-sky-950 text-xs flex items-center gap-1.5">
+                <span class="w-5 h-5 rounded-full bg-sky-600 text-white inline-flex items-center justify-center text-[11px] font-bold">3</span>
+                Guardar Imagem do Print (Comprovante)
+              </h4>
+              <p class="text-[11px] text-slate-600">
+                Anexe as imagens dos prints da fatura para ficarem salvas em <strong>Arquivos & Fotos</strong> vinculadas a este cartão:
+              </p>
+            </div>
+            <div class="space-y-2 pt-1">
+              <label class="w-full py-2.5 px-3 rounded-xl bg-white hover:bg-sky-100/70 text-sky-900 border border-sky-300 font-bold text-xs shadow-2xs transition cursor-pointer flex items-center justify-center gap-1.5">
+                <span>🖼️ Escolher Print(s) do Celular/PC</span>
+                <input id="cardPrintImageFileInput" type="file" accept="image/*" multiple class="hidden" onchange="handleCardPrintImageAttach(event)" />
+              </label>
+              <div id="cardPrintAttachFeedback" class="hidden text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl px-2.5 py-1.5"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lista de gastos já lançados neste cartão no mês selecionado -->
+        <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+          <div class="flex items-center justify-between">
+            <h4 class="font-bold text-slate-800 text-xs">Gastos já lançados neste Cartão (Mês selecionado)</h4>
+            <span id="cardPrintModalTotalBadge" class="text-xs font-extrabold text-indigo-950 bg-indigo-100 px-2.5 py-0.5 rounded-lg">Total: R$ 0,00</span>
+          </div>
+          <div id="cardPrintModalItemsList" class="space-y-1.5 max-h-44 overflow-y-auto custom-scroll pr-1">
+          </div>
+        </div>
+      </div>
+
+      <!-- Rodapé -->
+      <div class="pt-3 mt-3 border-t border-slate-100 flex justify-end">
+        <button type="button" onclick="closeCardPrintEntryModal()" class="py-2 px-5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition cursor-pointer">
+          Concluir e Fechar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =================================================================== -->
   <!-- MÓDULOS JAVASCRIPT SEPARADOS POR RESPONSABILIDADE (ETAPAS 2, 3 E 4) -->
   <!-- =================================================================== -->
-  <script src="js/utils.js?v=7"></script>
-  <script src="js/data-seed.js?v=7"></script>
-  <script src="js/state.js?v=7"></script>
-  <script src="js/finance-engine.js?v=7"></script>
-  <script src="js/financial-ai.js?v=7"></script>
-  <script src="js/importer-backup.js?v=7"></script>
-  <script src="js/supabase-config.js?v=7"></script>
-  <script src="js/supabase-sync.js?v=7"></script>
-  <script src="js/actions.js?v=7"></script>
-  <script src="js/auth-guard.js?v=7"></script>
-  <script src="js/ui-render.js?v=7"></script>
+  <script src="js/utils.js?v=8"></script>
+  <script src="js/data-seed.js?v=8"></script>
+  <script src="js/state.js?v=8"></script>
+  <script src="js/finance-engine.js?v=8"></script>
+  <script src="js/financial-ai.js?v=8"></script>
+  <script src="js/importer-backup.js?v=8"></script>
+  <script src="js/supabase-config.js?v=8"></script>
+  <script src="js/supabase-sync.js?v=8"></script>
+  <script src="js/actions.js?v=8"></script>
+  <script src="js/auth-guard.js?v=8"></script>
+  <script src="js/ui-render.js?v=8"></script>
 </body>
 </html>

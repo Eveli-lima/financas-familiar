@@ -2279,3 +2279,301 @@ function quickOpenDailyExpense() {
     }
   }, 120);
 }
+
+// ============================================================================
+// LANÇAMENTO EXCLUSIVO NO CARTÃO VITAL (OU ÉVELI) A PARTIR DE PRINTS / MANUAL
+// ============================================================================
+function openCardPrintEntryModal(cardId = 'card_marido') {
+  const modal = document.getElementById('cardPrintEntryModal');
+  if (!modal) return;
+
+  const accSelect = document.getElementById('cardPrintModalAccountSelect');
+  if (accSelect) accSelect.value = cardId || 'card_marido';
+
+  const curPeriod = (state.selectedPeriod && state.selectedPeriod !== 'ALL') ? state.selectedPeriod : '2026-10';
+  const periodSelect = document.getElementById('cardPrintModalPeriodSelect');
+  if (periodSelect) periodSelect.value = curPeriod;
+
+  const dateInput = document.getElementById('cardPrintSingleDateInput');
+  if (dateInput && !dateInput.value) {
+    const [yyyy, mm] = curPeriod.split('-');
+    dateInput.value = `15/${mm}/${yyyy}`;
+  }
+
+  renderCardPrintModalItems();
+  modal.classList.remove('hidden');
+}
+
+function closeCardPrintEntryModal() {
+  const modal = document.getElementById('cardPrintEntryModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function renderCardPrintModalItems() {
+  if (typeof document === 'undefined') return;
+  const listEl = document.getElementById('cardPrintModalItemsList');
+  const totalEl = document.getElementById('cardPrintModalTotalBadge');
+  const titleBadge = document.getElementById('cardPrintModalHolderBadge');
+  if (!listEl) return;
+
+  const cardId = document.getElementById('cardPrintModalAccountSelect')?.value || 'card_marido';
+  const period = document.getElementById('cardPrintModalPeriodSelect')?.value || '2026-10';
+  const isVital = cardId === 'card_marido';
+
+  if (titleBadge) {
+    titleBadge.textContent = isVital
+      ? 'Cartão Vital (Titular: Vital)'
+      : 'Cartão Itaú MC Gold (Titular: Éveli)';
+  }
+
+  const items = (state.transactions || []).filter(
+    t => t.accountId === cardId && t.period === period && t.type === 'card'
+  );
+
+  let totalCents = 0;
+  items.forEach(t => {
+    const c = toCents(t.amount);
+    totalCents += (t.kind === 'reimbursement' ? -c : c);
+  });
+
+  if (totalEl) {
+    totalEl.textContent = `Total em ${formatPeriodLabel(period)}: ${formatCentsBRL(totalCents)} (${items.length} ${items.length === 1 ? 'item' : 'itens'})`;
+  }
+
+  if (items.length === 0) {
+    listEl.innerHTML = `
+      <div class="p-4 text-center text-xs text-slate-400 italic bg-sky-50/40 rounded-xl border border-sky-100">
+        Nenhum gasto lançado neste cartão em ${formatPeriodLabel(period)} ainda. Adicione acima olhando seus prints!
+      </div>
+    `;
+    return;
+  }
+
+  listEl.innerHTML = items.map(t => {
+    const instBadge = (t.installmentTotal && t.installmentTotal >= 2)
+      ? `<span class="text-[10px] bg-sky-100 text-sky-800 font-semibold px-1.5 py-0.5 rounded">${t.installmentCurrent}/${t.installmentTotal}</span>`
+      : `<span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">À vista</span>`;
+    const protectedItem = typeof isTransactionProtected === 'function' && isTransactionProtected(t);
+
+    return `
+      <div class="flex items-center justify-between p-2.5 rounded-xl border border-sky-100 bg-white text-xs gap-2">
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-1.5">
+            <span class="font-bold text-slate-700">${escapeHtml(t.date)}</span>
+            <span class="font-semibold text-slate-900 truncate">${escapeHtml(t.desc)}</span>
+            ${instBadge}
+          </div>
+          <span class="text-[10px] text-slate-400">${escapeHtml(t.category)}</span>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <strong class="text-slate-900 font-bold">${formatBRL(t.amount)}</strong>
+          ${protectedItem ? `<span class="text-[10px] text-slate-400" title="Protegido">🔒</span>` : `
+            <button type="button" onclick="openEditTxModal('${t.id}')" class="text-sky-600 hover:text-sky-800 px-1 font-bold" title="Editar">✎</button>
+            <button type="button" onclick="deleteTransaction('${t.id}'); renderCardPrintModalItems();" class="text-rose-500 hover:text-rose-700 px-1 font-bold" title="Remover">✕</button>
+          `}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function submitSingleCardPrintEntry() {
+  const cardId = document.getElementById('cardPrintModalAccountSelect')?.value || 'card_marido';
+  const period = document.getElementById('cardPrintModalPeriodSelect')?.value || '2026-10';
+  const dateRaw = (document.getElementById('cardPrintSingleDateInput')?.value || '').trim();
+  const descRaw = (document.getElementById('cardPrintSingleDescInput')?.value || '').trim();
+  const amountRaw = (document.getElementById('cardPrintSingleAmountInput')?.value || '').trim();
+  const category = document.getElementById('cardPrintSingleCategoryInput')?.value || 'Casa, Serviços & Outros';
+  const instCurRaw = parseInt(document.getElementById('cardPrintSingleInstCurInput')?.value, 10);
+  const instTotRaw = parseInt(document.getElementById('cardPrintSingleInstTotInput')?.value, 10);
+
+  const amountNum = parseFloat(amountRaw.replace(/\./g, '').replace(',', '.'));
+  if (isNaN(amountNum) || amountNum <= 0) {
+    alert('Informe um valor válido maior que zero (ex: 85,90).');
+    return false;
+  }
+
+  const [yyyy, mm] = period.split('-');
+  const formattedDate = dateRaw || `15/${mm}/${yyyy}`;
+  const isVital = cardId === 'card_marido';
+  const owner = isVital ? 'Vital' : 'Éveli';
+  const source = isVital ? 'Cartão Vital' : 'Cartão MC Gold';
+
+  const hasInst = !isNaN(instTotRaw) && instTotRaw >= 2;
+  const instCur = hasInst ? Math.min(instTotRaw, Math.max(1, isNaN(instCurRaw) ? 1 : instCurRaw)) : null;
+  const instTot = hasInst ? instTotRaw : null;
+
+  const cleanDesc = descRaw || `Gasto ${source} (Print)`;
+  const finalDesc = (hasInst && !/\b\d{1,2}\/\d{1,2}\b/.test(cleanDesc))
+    ? `${cleanDesc} ${String(instCur).padStart(2, '0')}/${String(instTot).padStart(2, '0')}`
+    : cleanDesc;
+
+  const newTx = {
+    id: `card_manual_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    isManual: true,
+    owner,
+    source,
+    accountId: cardId,
+    period,
+    date: formattedDate,
+    type: 'card',
+    kind: 'expense',
+    scope: 'shared',
+    category,
+    installmentCurrent: instCur,
+    installmentTotal: instTot,
+    desc: finalDesc,
+    amount: fromCents(toCents(amountNum)),
+    createdBy: typeof getLoggedPerson === 'function' ? getLoggedPerson() : owner
+  };
+
+  state.transactions.unshift(newTx);
+  state.transactions = enrichTransactionsAndProjectInstallments(state.transactions);
+
+  if (typeof recordAuditLog === 'function') {
+    recordAuditLog(`Lançamento ${source}`, `${finalDesc} (${formatBRL(newTx.amount)}) em ${formatPeriodLabel(period)}`);
+  }
+
+  const descEl = document.getElementById('cardPrintSingleDescInput');
+  const amtEl = document.getElementById('cardPrintSingleAmountInput');
+  const curEl = document.getElementById('cardPrintSingleInstCurInput');
+  const totEl = document.getElementById('cardPrintSingleInstTotInput');
+  if (descEl) descEl.value = '';
+  if (amtEl) amtEl.value = '';
+  if (curEl) curEl.value = '';
+  if (totEl) totEl.value = '';
+
+  saveState();
+  renderAll();
+  renderCardPrintModalItems();
+  return true;
+}
+
+function submitBatchCardPrintText() {
+  const cardId = document.getElementById('cardPrintModalAccountSelect')?.value || 'card_marido';
+  const period = document.getElementById('cardPrintModalPeriodSelect')?.value || '2026-10';
+  const rawText = (document.getElementById('cardPrintBatchTextarea')?.value || '').trim();
+
+  if (!rawText) {
+    alert('Cole ou digite as linhas de gastos do print na caixa de texto.');
+    return false;
+  }
+
+  const isVital = cardId === 'card_marido';
+  const owner = isVital ? 'Vital' : 'Éveli';
+  const source = isVital ? 'Cartão Vital' : 'Cartão MC Gold';
+
+  // Tenta usar primeiro o parser inteligente e também aceita formato livre "Descrição 50,00"
+  const parsed = typeof parseAnyFinancialText === 'function'
+    ? parseAnyFinancialText(rawText, owner, cardId, period, true)
+    : { candidates: [] };
+
+  let candidates = parsed.candidates || [];
+
+  if (candidates.length === 0) {
+    const [yyyy, mm] = period.split('-');
+    const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    lines.forEach((line, idx) => {
+      const m = line.match(/^(?:(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\s+)?(.+?)\s+(?:R\$\s*)?(-?\d[\d.]*,\d{2}|\d+(?:\.\d{2})?)$/i);
+      if (m) {
+        const rawDate = m[1] ? (m[1].length <= 5 ? `${m[1]}/${yyyy}` : m[1]) : `15/${mm}/${yyyy}`;
+        const desc = m[2].trim();
+        const val = parseFloat(m[3].replace(/\./g, '').replace(',', '.'));
+        if (!isNaN(val) && Math.abs(val) > 0) {
+          candidates.push({
+            id: `card_manual_batch_${Date.now()}_${idx}`,
+            isManual: true,
+            owner,
+            source,
+            accountId: cardId,
+            period,
+            date: rawDate,
+            type: 'card',
+            kind: val < 0 ? 'reimbursement' : 'expense',
+            scope: 'shared',
+            category: typeof guessCategoryByText === 'function' ? guessCategoryByText(desc) : 'Casa, Serviços & Outros',
+            desc,
+            amount: fromCents(toCents(Math.abs(val))),
+            createdBy: typeof getLoggedPerson === 'function' ? getLoggedPerson() : owner
+          });
+        }
+      }
+    });
+  } else {
+    candidates = candidates.map((c, idx) => ({
+      ...c,
+      id: `card_manual_batch_${Date.now()}_${idx}`,
+      isManual: true,
+      owner,
+      source,
+      accountId: cardId,
+      period,
+      type: 'card'
+    }));
+  }
+
+  if (candidates.length === 0) {
+    alert('Não consegui identificar valores nas linhas coladas. Exemplo de formato aceito:\n12/10 Posto Shell 150,00\nSupermercado 230,50');
+    return false;
+  }
+
+  state.transactions.unshift(...candidates);
+  state.transactions = enrichTransactionsAndProjectInstallments(state.transactions);
+
+  if (typeof recordAuditLog === 'function') {
+    recordAuditLog(`Importação de Print (${source})`, `${candidates.length} compras adicionadas em ${formatPeriodLabel(period)}`);
+  }
+
+  const area = document.getElementById('cardPrintBatchTextarea');
+  if (area) area.value = '';
+
+  saveState();
+  renderAll();
+  renderCardPrintModalItems();
+  alert(`✅ ${candidates.length} gasto(s) adicionado(s) com sucesso exclusivamente no ${source} (${formatPeriodLabel(period)})!`);
+  return true;
+}
+
+function handleCardPrintImageAttach(event) {
+  const file = event?.target?.files?.[0];
+  if (!file) return;
+
+  const cardId = document.getElementById('cardPrintModalAccountSelect')?.value || 'card_marido';
+  const period = document.getElementById('cardPrintModalPeriodSelect')?.value || '2026-10';
+  const isVital = cardId === 'card_marido';
+  const accountLabel = isVital ? 'Cartão Vital' : 'Cartão Itaú MC Gold (Final 5544)';
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const dataUrl = reader.result;
+    if (!Array.isArray(state.uploadedFiles)) state.uploadedFiles = [];
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const uploadedAt = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+    state.uploadedFiles.unshift({
+      id: 'file_print_' + Date.now(),
+      fileName: file.name || `Print_${accountLabel}_${period}.jpg`,
+      fileType: 'receipt_photo',
+      fileSize: file.size || 0,
+      uploadedAt,
+      period,
+      targetAccount: cardId,
+      accountLabel,
+      itemCount: 1,
+      totalAmount: 0,
+      receiptImage: typeof dataUrl === 'string' ? dataUrl : null,
+      dailyExpenseId: null,
+      desc: `Print da Fatura — ${accountLabel} (${formatPeriodLabel(period)})`
+    });
+
+    saveState();
+    renderAll();
+    const feedback = document.getElementById('cardPrintAttachFeedback');
+    if (feedback) {
+      feedback.textContent = `✅ Imagem "${file.name}" anexada e salva em Arquivos & Fotos!`;
+      feedback.classList.remove('hidden');
+    }
+  };
+  reader.readAsDataURL(file);
+}

@@ -755,4 +755,47 @@ runTest('27. Sincronia Total Notebook + Celular: Unificação automática dos 4 
   assert.strictEqual(unified.transactions.some(t => t.id === 'manual_user_1'), true, 'Lançamento manual do usuário é preservado');
 });
 
+runTest('28. Cartão Vital (Prints / Manual): Lançamentos caem exclusivamente no Cartão Vital sem afetar Cartão Éveli nem Conta Corrente', () => {
+  const st = getState();
+  const origTx = [...st.transactions];
+
+  const beforeOct = ctx.calculatePeriodSummary(st.transactions.filter(t => t.period === '2026-10'), '2026-10');
+  assert.strictEqual(beforeOct.cardMaridoCents, 0, 'Cartão Vital inicia zerado em Out/2026');
+
+  // Simula lançamento via modal de Prints no Cartão Vital (card_marido)
+  const fakeElements = {
+    cardPrintModalAccountSelect: { value: 'card_marido' },
+    cardPrintModalPeriodSelect: { value: '2026-10' },
+    cardPrintSingleDateInput: { value: '18/10/2026' },
+    cardPrintSingleDescInput: { value: 'Posto Shell (Print Cartão Vital)', focus: () => {} },
+    cardPrintSingleAmountInput: { value: '185,50' },
+    cardPrintSingleCategoryInput: { value: 'Transporte & Combustível' },
+    cardPrintSingleInstCurInput: { value: '1' },
+    cardPrintSingleInstTotInput: { value: '1' },
+    cardPrintBatchTextarea: { value: '20/10 Supermercado Vital 214,50\n22/10 Oficina Parcelada 01/02 150,00' }
+  };
+
+  const origGetEl = ctx.document.getElementById;
+  ctx.document.getElementById = (id) => fakeElements[id] || origGetEl(id);
+
+  ctx.submitSingleCardPrintEntry({ preventDefault: () => {} });
+  ctx.submitBatchCardPrintText();
+
+  ctx.document.getElementById = origGetEl;
+
+  const afterOct = ctx.calculatePeriodSummary(st.transactions.filter(t => t.period === '2026-10'), '2026-10');
+  const afterNov = ctx.calculatePeriodSummary(st.transactions.filter(t => t.period === '2026-11'), '2026-11');
+
+  // 185,50 + 214,50 + 150,00 = R$ 550,00 (55000 centavos) exclusivamente no Cartão Vital
+  assert.strictEqual(afterOct.cardMaridoCents, 55000, 'Cartão Vital em Out/2026 deve somar exatamente R$ 550,00');
+  assert.strictEqual(afterOct.cardEveliCents, beforeOct.cardEveliCents, 'Cartão Éveli não deve ser alterado');
+  assert.strictEqual(afterOct.bankEndingBalanceCents, beforeOct.bankEndingBalanceCents, 'Saldo da Conta Corrente não deve ser alterado');
+
+  // E a parcela 02/02 de R$ 150,00 deve ter sido projetada automaticamente para Nov/2026 no Cartão Vital
+  assert.strictEqual(afterNov.cardMaridoCents, 15000, 'Parcela 02/02 de R$ 150,00 deve ser projetada para Nov/2026 no Cartão Vital');
+
+  // Restaura transações originais
+  st.transactions = origTx;
+});
+
 console.log(`\n🎉 Resultado Final: ${passed} testes aprovados com sucesso!`);

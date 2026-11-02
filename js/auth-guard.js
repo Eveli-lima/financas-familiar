@@ -216,8 +216,11 @@ function resolveUserHouseholdAndProfile(user, customHouseholdInput = '', fallbac
   // 1. Verifica se pertence à conta oficial da Éveli e do Vital
   if (isAuthorizedCoupleUser(lowerEmail, rawName, metaHousehold, customHousehold)) {
     const isVital = lowerEmail.includes('vital') || rawName.toLowerCase().includes('vital');
+    const person = isVital ? 'Vital' : 'Éveli';
     return {
-      person: isVital ? 'Vital' : 'Éveli',
+      person,
+      fullName: rawName || person,
+      email,
       householdCode: coupleCode,
       isCouple: true
     };
@@ -239,6 +242,8 @@ function resolveUserHouseholdAndProfile(user, customHouseholdInput = '', fallbac
 
   return {
     person: displayPerson,
+    fullName: rawName || displayPerson,
+    email,
     householdCode: isolatedHousehold,
     isCouple: false
   };
@@ -365,11 +370,12 @@ function captureOAuthRedirectFromUrl() {
     if (typeof cloudConfig !== 'undefined') {
       cloudConfig.loggedEmail = fakeUser.email;
       cloudConfig.loggedPerson = resolved.person;
+      cloudConfig.loggedFullName = resolved.fullName || resolved.person;
       cloudConfig.householdCode = resolved.householdCode;
       if (typeof saveCloudConfig === 'function') saveCloudConfig();
     }
 
-    saveSession(resolved.person, true, resolved.householdCode, fakeUser.email);
+    saveSession(resolved.person, true, resolved.householdCode, fakeUser.email, resolved.fullName);
 
     // Limpa o hash da barra de endereços após 1.5s para deixar a URL limpa
     setTimeout(() => {
@@ -518,10 +524,11 @@ function getStoredSession() {
   return null;
 }
 
-function saveSession(person, rememberMe, householdCode, email) {
+function saveSession(person, rememberMe, householdCode, email, fullName) {
   const durationMs = rememberMe ? (30 * 24 * 60 * 60 * 1000) : (8 * 60 * 60 * 1000); // 30 dias ou 8 horas
   const session = {
     person,
+    fullName: fullName || (typeof cloudConfig !== 'undefined' ? cloudConfig.loggedFullName : '') || person,
     householdCode: householdCode || (typeof cloudConfig !== 'undefined' ? cloudConfig.householdCode : 'casal_eveli_vital'),
     email: email || (typeof cloudConfig !== 'undefined' ? cloudConfig.loggedEmail : ''),
     rememberMe,
@@ -546,7 +553,7 @@ function clearSession() {
   } catch (e) {}
 }
 
-function completeLoginSuccess(person, householdCode, email, rememberMe) {
+function completeLoginSuccess(person, householdCode, email, rememberMe, fullName) {
   const cfg = getStoredAuthConfig();
   if (cfg) {
     cfg.failedAttempts = 0;
@@ -557,6 +564,7 @@ function completeLoginSuccess(person, householdCode, email, rememberMe) {
   if (typeof cloudConfig !== 'undefined') {
     if (email) cloudConfig.loggedEmail = email;
     cloudConfig.loggedPerson = person;
+    cloudConfig.loggedFullName = fullName || person;
     cloudConfig.householdCode = householdCode;
     if (typeof saveCloudConfig === 'function') saveCloudConfig();
   }
@@ -565,7 +573,7 @@ function completeLoginSuccess(person, householdCode, email, rememberMe) {
     switchActiveHouseholdState(householdCode, person);
   }
 
-  saveSession(person, rememberMe, householdCode, email);
+  saveSession(person, rememberMe, householdCode, email, fullName || person);
   showLoginFeedback(`Bem-vindo(a), ${person}!`, 'success');
   unlockApp(person, true);
 
@@ -596,6 +604,7 @@ async function initAuthGuard() {
         if (activeSession.householdCode) cloudConfig.householdCode = activeSession.householdCode;
         if (activeSession.email) cloudConfig.loggedEmail = activeSession.email;
         cloudConfig.loggedPerson = activeSession.person;
+        cloudConfig.loggedFullName = activeSession.fullName || activeSession.person;
         if (typeof saveCloudConfig === 'function') saveCloudConfig();
       }
       if (typeof switchActiveHouseholdState === 'function' && activeSession.householdCode) {
@@ -675,6 +684,7 @@ function setupSupabaseAuthListener() {
       if (typeof cloudConfig !== 'undefined') {
         cloudConfig.loggedEmail = email;
         cloudConfig.loggedPerson = resolved.person;
+        cloudConfig.loggedFullName = resolved.fullName || resolved.person;
         cloudConfig.householdCode = resolved.householdCode;
         if (typeof saveCloudConfig === 'function') saveCloudConfig();
       }
@@ -684,7 +694,7 @@ function setupSupabaseAuthListener() {
       }
 
       const wasUnlocked = authState.isUnlocked;
-      saveSession(resolved.person, true, resolved.householdCode, email);
+      saveSession(resolved.person, true, resolved.householdCode, email, resolved.fullName);
       unlockApp(resolved.person, !wasUnlocked);
 
       if (typeof pullStateFromSupabaseCloud === 'function') {
