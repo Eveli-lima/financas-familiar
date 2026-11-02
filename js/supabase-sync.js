@@ -221,10 +221,15 @@ function closeAuthCloudModal() {
 }
 
 function saveCloudSettingsFromModal() {
-  cloudConfig.supabaseUrl = (document.getElementById('cloudSupabaseUrlInput').value || '').trim();
-  cloudConfig.supabaseAnonKey = (document.getElementById('cloudSupabaseKeyInput').value || '').trim();
-  cloudConfig.householdCode = (document.getElementById('cloudHouseholdCodeInput').value || 'casal_eveli_vital').trim();
-  cloudConfig.loggedEmail = (document.getElementById('cloudUserEmailInput').value || '').trim();
+  const urlInput = document.getElementById('cloudSupabaseUrlInput');
+  const keyInput = document.getElementById('cloudSupabaseKeyInput');
+  const codeInput = document.getElementById('cloudHouseholdCodeInput');
+  const emailInput = document.getElementById('cloudUserEmailInput');
+
+  if (urlInput && urlInput.value.trim()) cloudConfig.supabaseUrl = urlInput.value.trim();
+  if (keyInput && keyInput.value.trim()) cloudConfig.supabaseAnonKey = keyInput.value.trim();
+  if (codeInput && codeInput.value.trim()) cloudConfig.householdCode = codeInput.value.trim();
+  if (emailInput && emailInput.value.trim()) cloudConfig.loggedEmail = emailInput.value.trim();
   saveCloudConfig();
   updateAuthHeaderUI();
 
