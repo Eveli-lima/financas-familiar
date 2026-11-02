@@ -705,4 +705,35 @@ runTest('25. Isolamento Multi-Conta: Outra pessoa começa em uma conta 100% do z
   assert.strictEqual(externalData.savingsAccounts.poupanca_itau.monthlyData['2026-10'].balance, 0, 'Poupança Itaú externa deve iniciar em R$ 0,00');
 });
 
+runTest('26. Saldo Anterior: Apenas Setembro/2026 é editável e todos os outros meses são 100% automáticos', () => {
+  const st = getState();
+  const origPeriod = st.selectedPeriod;
+  const origSepStart = { ...st.periodStartingBalances['2026-09'] };
+
+  // 1. Tentar editar Saldo Anterior em Outubro/2026 deve ser bloqueado (retorna false)
+  st.selectedPeriod = '2026-10';
+  ctx.prompt = () => '9999,00';
+  assert.strictEqual(ctx.editPrevBalanceManual(), false, 'Outubro não deve permitir edição manual do Saldo Anterior');
+
+  // 2. Em Setembro/2026, a edição é liberada e reflete automaticamente no saldo inicial de Outubro/2026
+  st.selectedPeriod = '2026-09';
+  ctx.prompt = () => '100,00';
+  const octBefore = ctx.getStartingBalanceForPeriod('2026-10').amount;
+  const diffFromOrig = 100 - origSepStart.amount;
+
+  assert.strictEqual(ctx.editPrevBalanceManual(), true, 'Setembro/2026 deve permitir ajuste manual do Saldo Anterior');
+  assert.strictEqual(st.periodStartingBalances['2026-09'].amount, 100);
+
+  const octAfter = ctx.getStartingBalanceForPeriod('2026-10').amount;
+  assert.strictEqual(
+    ctx.toCents(octAfter),
+    ctx.toCents(octBefore) + ctx.toCents(diffFromOrig),
+    'O Saldo Anterior de Outubro deve atualizar automaticamente em cadeia ao alterar Setembro'
+  );
+
+  // Restaura estado original
+  st.periodStartingBalances['2026-09'] = origSepStart;
+  st.selectedPeriod = origPeriod;
+});
+
 console.log(`\n🎉 Resultado Final: ${passed} testes aprovados com sucesso!`);

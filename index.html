@@ -376,7 +376,8 @@
           <div class="bg-white rounded-2xl p-4 border border-sky-200/70 shadow-sm shadow-sky-900/[0.03] flex flex-col justify-between">
             <div class="flex items-center justify-between">
               <span class="text-[11px] font-semibold uppercase tracking-wider text-sky-700/80">1. Saldo Anterior</span>
-              <button onclick="editPrevBalanceManual()" class="text-[11px] text-sky-600 hover:text-sky-800 underline font-medium">Ajustar</button>
+              <button id="btnEditPrevBalanceOverview" onclick="editPrevBalanceManual()" class="hidden text-[11px] text-sky-600 hover:text-sky-800 underline font-medium">Ajustar</button>
+              <span id="badgeAutoPrevBalanceOverview" class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200/60" title="Calculado automaticamente a partir do saldo final do mês anterior">🔄 Automático</span>
             </div>
             <div class="mt-2">
               <div id="prevMonthBalanceDisplay" class="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">R$ 0,00</div>
@@ -500,9 +501,9 @@
               <span>Importar Extrato OFX (.ofx)</span>
             </button>
             <input type="file" id="bankOfxFileInput" accept=".ofx" onchange="handleBankOfxUpload(event)" class="hidden" />
-            <button onclick="editPrevBalanceManual()" class="text-xs bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-semibold px-3 py-2 rounded-xl transition flex items-center gap-1" title="Ajustar manualmente o saldo inicial da conta">
+            <button id="btnEditPrevBalanceBanking" onclick="editPrevBalanceManual()" class="hidden text-xs bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-semibold px-3 py-2 rounded-xl transition flex items-center gap-1" title="Ajustar manualmente o saldo anterior de Setembro/2026">
               <span>✏️</span>
-              <span>Ajustar Saldo</span>
+              <span>Ajustar Saldo (Set/26)</span>
             </button>
             <button 
               type="button" 

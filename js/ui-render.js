@@ -139,6 +139,15 @@ function renderAll() {
   document.getElementById('prevMonthBalanceDisplay').textContent = formatCentsBRL(prevBalanceCents);
   document.getElementById('subPrevBalance').textContent = startInfo.label;
 
+  // Libera o botão "Ajustar" do Saldo Anterior APENAS em Setembro/2026 (nos demais meses é 100% automático)
+  const isSeptPeriod = p === '2026-09';
+  const btnPrevOverview = document.getElementById('btnEditPrevBalanceOverview');
+  const badgeAutoOverview = document.getElementById('badgeAutoPrevBalanceOverview');
+  const btnPrevBanking = document.getElementById('btnEditPrevBalanceBanking');
+  if (btnPrevOverview) btnPrevOverview.classList.toggle('hidden', !isSeptPeriod);
+  if (badgeAutoOverview) badgeAutoOverview.classList.toggle('hidden', isSeptPeriod);
+  if (btnPrevBanking) btnPrevBanking.classList.toggle('hidden', !isSeptPeriod);
+
   document.getElementById('incomeTotalDisplay').textContent = '+ ' + formatCentsBRL(totalIncomeCents);
   document.getElementById('incomeCountSub').textContent = totalReimbursementBankCents > 0
     ? `+ ${formatCentsBRL(totalReimbursementBankCents)} em reembolsos abatidos`
@@ -312,7 +321,10 @@ function renderAll() {
       </div>
       <div class="mt-3 pt-2.5 border-t border-sky-100 flex items-center justify-between text-[11px]">
         <span class="text-slate-500">Reservas no mês: <strong class="text-sky-900">${formatCentsBRL(totalGoalReserveCents)}</strong></span>
-        <button onclick="editPrevBalanceManual()" class="text-sky-700 hover:text-sky-900 underline font-medium">Ajustar Saldo</button>
+        ${p === '2026-09'
+          ? `<button onclick="editPrevBalanceManual()" class="text-sky-700 hover:text-sky-900 underline font-medium">Ajustar Saldo</button>`
+          : `<span class="text-[10px] text-slate-400 font-medium" title="Calculado automaticamente do mês anterior">🔄 Saldo Automático</span>`
+        }
       </div>
     </div>
     ${investmentsSummaryBoxHtml}

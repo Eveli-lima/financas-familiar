@@ -16,10 +16,6 @@ function computeBankEndingBalanceThrough(targetPeriod, targetState) {
   let guard = 0;
   while (curP <= targetPeriod && guard < 120) {
     guard++;
-    if (curP !== basePeriod && targetState.periodStartingBalances?.[curP]?.isManualOverride) {
-      runningCents = toCents(targetState.periodStartingBalances[curP].amount || 0);
-    }
-
     const pTx = (targetState.transactions || []).filter(
       t => t.period === curP && t.type !== 'card' && t.accountId !== 'poupanca_caixa' && !t.isAutoProjected
     );
@@ -43,19 +39,18 @@ function getStartingBalanceForPeriod(period, stateRef) {
   const targetState = stateRef || state;
   if (!targetState.periodStartingBalances) targetState.periodStartingBalances = {};
 
-  // Se houver ajuste manual expressamente marcado pelo usuário para o período:
-  if (targetState.periodStartingBalances[period] && targetState.periodStartingBalances[period].isManualOverride) {
-    return targetState.periodStartingBalances[period];
+  // Apenas Setembro/2026 (2026-09) possui saldo anterior editável manualmente
+  if (period === '2026-09') {
+    return targetState.periodStartingBalances['2026-09'] || { amount: 0, label: `Saldo inicial (${formatPeriodLabel('2026-09')})` };
   }
 
-  // Meses futuros que ainda não têm saldos/extratos bancários definidos (Nov/2026 em diante sem lançamentos próprios): mantêm saldo zerado
+  // Todos os demais meses (Out/2026 em diante) são calculados 100% no automático a partir do mês anterior
   if (period && period !== 'ALL' && /^\d{4}-\d{2}$/.test(period)) {
     const hasOwnBankTx = (targetState.transactions || []).some(
       t => t.period === period && t.type !== 'card' && t.accountId !== 'poupanca_caixa' && !t.isProjected && !t.isAutoProjected
     );
-    const hasManual = targetState.periodStartingBalances[period]?.isManualOverride;
 
-    if (period > '2026-10' && !hasOwnBankTx && !hasManual) {
+    if (period > '2026-10' && !hasOwnBankTx) {
       return { amount: 0, label: `Saldo zerado (aguardando extrato de ${formatPeriodLabel(period)})` };
     }
 
@@ -387,7 +382,7 @@ function calculateMonthlyEvolution(periodsList, ownerFilter, scopeFilter) {
   return periods.map(p => {
     // Verifica se este mês possui dados/saldos reais definidos (Set/26, Out/26 ou meses com lançamentos bancários reais)
     const hasRealBankTx = (state.transactions || []).some(t => t.period === p && t.type !== 'card' && !t.isProjected);
-    const hasManualStart = state.periodStartingBalances?.[p]?.isManualOverride;
+    const hasManualStart = p === '2026-09' && state.periodStartingBalances?.['2026-09']?.isManualOverride;
     const hasDefinedValues = (p <= '2026-10') || hasRealBankTx || hasManualStart;
 
     if (!hasDefinedValues) {

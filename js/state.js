@@ -316,12 +316,19 @@ function sanitizeState(raw, householdOverride) {
   clean.transactions = clean.transactions.filter(t => String(t.period) >= '2026-09');
   if (clean.periodStartingBalances) {
     delete clean.periodStartingBalances['2026-08'];
+    // Garante que apenas Setembro/2026 (2026-09) possa ter override manual; outros meses são 100% automáticos
+    Object.keys(clean.periodStartingBalances).forEach(k => {
+      if (k !== '2026-09' && clean.periodStartingBalances[k] && typeof clean.periodStartingBalances[k] === 'object') {
+        delete clean.periodStartingBalances[k].isManualOverride;
+      }
+    });
   }
 
-  // Se o usuário zerou a conta (0 transações), garante que saldos anteriores e faturas antigas fiquem 100% zerados
+  // Se o usuário zerou a conta (0 transações), garante que saldos anteriores (exceto se Set/26 foi ajustado manualmente) e faturas antigas fiquem zerados
   if (clean.transactions.length === 0) {
     if (clean.periodStartingBalances) {
       Object.keys(clean.periodStartingBalances).forEach(k => {
+        if (k === '2026-09' && clean.periodStartingBalances[k]?.isManualOverride) return;
         clean.periodStartingBalances[k] = { amount: 0, label: clean.periodStartingBalances[k]?.label || '' };
       });
     }

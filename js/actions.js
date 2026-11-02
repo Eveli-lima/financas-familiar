@@ -40,25 +40,27 @@ function toggleIncludeCardBill(checked) {
 
 function editPrevBalanceManual() {
   const p = state.selectedPeriod;
-  if (typeof isPeriodLockedForUser === 'function' && isPeriodLockedForUser(p)) {
+  if (p !== '2026-09') {
     if (typeof alert === 'function') {
-      alert('🔒 Mês Protegido!\n\nO saldo de meses anteriores ou encerrados é imutável pela interface e só pode ser alterado pelo desenvolvedor via terminal.');
+      alert('🔄 Saldo Anterior Automático!\n\nApenas o Saldo Anterior de Setembro/2026 pode ser alterado manualmente.\nNos demais meses, o Saldo Anterior é calculado automaticamente a partir do Saldo Final do mês anterior.');
     }
     return false;
   }
-  const curInfo = getStartingBalanceForPeriod(p);
-  const val = prompt(`Informe o Saldo Bancário Inicial da Conta Conjunta Itaú para (${formatPeriodLabel(p)}):`, curInfo.amount);
-  if (val === null) return;
+  const curInfo = getStartingBalanceForPeriod('2026-09');
+  const val = prompt(`Informe o Saldo Bancário Anterior de Setembro/2026 (${formatPeriodLabel('2026-09')}):`, curInfo.amount);
+  if (val === null) return false;
   const num = parseFloat(String(val).replace(/\./g, '').replace(',', '.'));
   if (!isNaN(num)) {
-    state.periodStartingBalances[p] = {
+    state.periodStartingBalances['2026-09'] = {
       amount: fromCents(toCents(num)),
-      label: `Ajustado manualmente (${formatPeriodLabel(p)})`,
+      label: `Saldo inicial de Set/26 (${formatCentsBRL(toCents(num))})`,
       isManualOverride: true
     };
     saveState();
     renderAll();
+    return true;
   }
+  return false;
 }
 
 function editPoupancaCaixaBalanceManual() {
