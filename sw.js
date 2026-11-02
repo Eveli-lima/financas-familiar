@@ -4,7 +4,7 @@
 // Permite que o navegador reconheça o sistema como um aplicativo instalável
 // e mantenha os arquivos essenciais em cache para abertura rápida.
 
-const CACHE_NAME = 'financas-casal-v3';
+const CACHE_NAME = 'financas-casal-v4';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

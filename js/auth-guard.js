@@ -407,9 +407,10 @@ async function loginWithGoogleOAuth() {
   showLoginFeedback('Redirecionando para o Google com segurança...', 'info');
 
   try {
-    // Usa origin limpo para bater 100% com a Site URL cadastrada no painel do Supabase
+    // Usa origin + pathname exato (ex: https://financas-familiar.vercel.app/) para bater
+    // exatamente com a Redirect URL cadastrada no Supabase e nunca cair na Site URL antiga!
     const redirectTo = (typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin !== 'null')
-      ? window.location.origin
+      ? window.location.origin + window.location.pathname
       : undefined;
 
     const { error } = await client.auth.signInWithOAuth({
@@ -1107,18 +1108,25 @@ function showPasswordHint() {
 }
 
 // ----------------------------------------------------------------------------
-// TIMER DE INATIVIDADE (AUTO-LOCK APÓS 15 MINUTOS)
+// CONTROLE DE SESSÃO PERSISTENTE (RESPEITA "MANTER CONECTADO NESTE APARELHO")
 // ----------------------------------------------------------------------------
 function resetInactivityTimer() {
   if (authState.inactivityTimer) clearTimeout(authState.inactivityTimer);
 
+  // Se o usuário marcou "Manter conectado neste aparelho" (ou entrou com Google),
+  // NÃO faz logout sozinho quando o computador fica ocioso! Só bloqueia se clicar em "🔒 Bloquear".
+  const session = getStoredSession();
+  if (session && session.rememberMe) {
+    return;
+  }
+
   const cfg = getStoredAuthConfig();
-  const minutes = (cfg && cfg.autoLockMinutes) ? cfg.autoLockMinutes : 15;
+  const minutes = (cfg && cfg.autoLockMinutes) ? cfg.autoLockMinutes : 60;
   const timeoutMs = minutes * 60 * 1000;
 
   authState.inactivityTimer = setTimeout(() => {
-    if (authState.isUnlocked) {
-      console.log('Bloqueando tela por inatividade...');
+    const currentSession = getStoredSession();
+    if (authState.isUnlocked && (!currentSession || !currentSession.rememberMe)) {
       lockAppScreen();
     }
   }, timeoutMs);
